@@ -1,0 +1,348 @@
+\documentclass[final,draft]{vutinfth} % Add option 'final' when done.
+
+% Load packages to allow in- and output of non-ASCII characters.
+\usepackage{lmodern}        % Use an extension of the original Computer Modern font to minimize the use of bitmapped letters.
+\usepackage[T1]{fontenc}    % Determines font encoding of the output. Font packages have to be included before this line.
+\usepackage[utf8]{inputenc} % Determines encoding of the input. All input files have to use UTF8 encoding.
+
+% Extended LaTeX functionality is enables by including packages with \usepackage{...}.
+\usepackage{amsmath}    % Extended typesetting of mathematical expression.
+\usepackage{amssymb}    % Provides a multitude of mathematical symbols.
+\usepackage{mathtools}  % Further extensions of mathematical typesetting.
+\usepackage{microtype}  % Small-scale typographic enhancements.
+\usepackage[inline]{enumitem} % User control over the layout of lists (itemize, enumerate, description).
+\usepackage{multirow}   % Allows table elements to span several rows.
+\usepackage{booktabs}   % Improves the typesetting of tables.
+\usepackage{subcaption} % Allows the use of subfigures and enables their referencing.
+\usepackage[ruled,linesnumbered,algochapter]{algorithm2e} % Enables the writing of pseudo code.
+\usepackage{minted}
+\usepackage[usenames,dvipsnames,table]{xcolor} % Allows the definition and use of colors. This package has to be included before tikz.
+\usepackage{nag}       % Issues warnings when best practices in writing LaTeX documents are violated.
+\usepackage{todonotes} % Provides tooltip-like todo notes.
+\usepackage{hyperref}  % Enables hyperlinking in the electronic document version. This package has to be included second to last.
+\usepackage[acronym,toc]{glossaries} % Enables the generation of glossaries and lists of acronyms. This package has to be included last.
+\usepackage{listings} % Code
+\lstset{
+    basicstyle=\ttfamily,
+    keywordstyle=\color{blue},
+    commentstyle=\color{gray},
+    stringstyle=\color{red},
+    breaklines=true
+}
+
+% Define convenience functions here:
+\newcommand{\authorname}{Jannis Adamek}
+\newcommand{\thesistitle}{TODO: title}
+\newcommand{\thesistitlegerman}{TODO: title deutsch}
+
+% Set PDF document properties
+\hypersetup{
+    pdfpagelayout   = TwoPageRight,           % How the document is shown in PDF viewers (optional).
+    linkbordercolor = {Melon},                % The color of the borders of boxes around hyperlinks (optional).
+    pdfauthor       = {\authorname},          % The author's name in the document properties (optional).
+    pdftitle        = {\thesistitle},         % The document's title in the document properties (optional).
+    pdfsubject      = {TODO: subject},        % The document's subject in the document properties (optional).
+    pdfkeywords     = {TODO, list, of, keywords} % The document's keywords in the document properties (optional).
+}
+
+\setpnumwidth{2.5em}        % Avoid overfull hboxes in the table of contents (see memoir manual).
+\setsecnumdepth{subsection} % Enumerate subsections.
+
+\nonzeroparskip             % Create space between paragraphs (optional).
+\setlength{\parindent}{0pt} % Remove paragraph indentation (optional).
+
+\makeindex      % Use an optional index.
+\makeglossaries % Use an optional glossary.
+
+% Set persons with 4 arguments:
+%  {title before name}{name}{title after name}{gender}
+%  where both titles are optional (i.e. can be given as empty brackets {}).
+\setauthor{}{\authorname}{}{male}
+\setadvisor{Univ.Lektor Dipl.-Ing. Dr.techn.}{Markus Raab}{}{male}
+
+\setregnumber{11809490}
+% TODO: set date
+\setdate{27}{10}{2024} % Set date with 3 arguments: {day}{month}{year}.
+\settitle{\thesistitle}{\thesistitlegerman}
+% \setsubtitle{Optional Subtitle of the Thesis}{Optionaler Untertitel der Arbeit} % Sets English and German version of the subtitle (both can be English or German).
+
+\setthesis{bachelor}
+
+% For bachelor and master:
+\setcurriculum{Software \& Information Engineering}{Software \& Information Engineering}
+
+\begin{document}
+
+\frontmatter
+
+\addtitlepage{naustrian}
+\addtitlepage{english}
+\addstatementpage
+
+\begin{acknowledgements*}
+
+TODO: acknowledgments
+
+\end{acknowledgements*}
+
+\begin{abstract}
+    PermaplanT is a web application for collaborative online garden planing. TODO: write abstract
+\end{abstract}
+
+\selectlanguage{english}
+
+% Acronyms go here
+\newacronym{http}{HTTP}{Hypertext Transfer Protocol}
+\newacronym{sse}{SSE}{Server Sent Events}
+\newacronym{json}{JSON}{JavaScript Object Notation}
+\newacronym{uuid}{UUID}{Universally Unique Identifier}
+
+\tableofcontents % Starred version, i.e., \tableofcontents*, removes the self-entry.
+
+% Switch to arabic numbering and start the enumeration of chapters in the table of content.
+\mainmatter
+
+\chapter{Introduction}
+
+\section{PermaplanT}
+
+PermaplanT (\texttt{https://www.permaplant.net}) is an innovative web application that strives to help users plan gardening spaces following the principles of permaculture.
+The application follows a classic web application architecture, consisting of a client-side frontend running in the user's web browser and a server-side backend.
+The frontend is built with JavaScript and the React framework, while the backend is developed in the Rust, backed by the relational database PostgreSQL for data storage.
+Additionally, PermaplanT features a dataset of about 10.000 plant entries with information about life cycles, fertility, light and water needs, and plant relationships.
+
+\section{The Collaborative Map Editor}
+
+The central feature of PermaplanT is its Map Editor, a garden planning tool that allows users to add, remove, and manage garden elements including plants, soil textures, and shading.
+To support collaborative garden planning, the Map Editor is fully synchronized: changes made by one user are reflected in real-time on all clients viewing the same map.
+
+\section{Research Objective}
+
+In this thesis, we will evaluate the performance and correctness of the event broadcasting mechanism within the PermaplanT Map Editor.
+One of PermaplanT's non-functional requirements is to support up to 100 concurrent users making changes to the same map without degradation in response times.
+We will test if the current implementation of the event broadcasting mechanism requirement adequately achieved this scalability target.
+
+In terms of correctness, we will assess whether the sequence of database updates aligns with the sequence of actions, ensuring that the map state stays consistent with the database.
+
+Our research will specifically address:
+\begin{enumerate}
+  \item \textbf{Performance}: How much longer do requests take to complete when there are more observers receiving updates?
+  \item \textbf{Correctness}: Does the order of actions reflect correctly on the client side to prevent discrepancies between the client and server map states?”
+\end{enumerate}
+
+\chapter{Background}
+
+\section{Broadcasting mechanism}
+
+When a user opens the Map Editor in their web browser, the frontend sends a \texttt{GET} request to the \gls{http} endpoint \texttt{/api/updates/maps}.
+This establishes a unidirectonal stream from the server to the client using \gls{sse}.
+If \gls{sse} is unavailable the server uses long-polling over \gls{http} to maintain a continuous connection.
+Through this data stream, the client receives map update in \gls{json} format referred to as \emph{actions} within PermaplanT.
+Each action has a \texttt{type} field, which defines what information it carries.
+For example, actions that affect plantings on the map include the following types:
+\begin{itemize}
+    \item \texttt{"CreatePlanting"} Creates one ore more new plantings
+    \item \texttt{"MovePlanting"} Updates the 2-dimentional position of one or more plantings on the map
+    \item\texttt{"TransformPlanting"} Changes the size of one or more plantings on the map
+\end{itemize}
+
+For each \gls{http} endpoint that modifies the state of the map, the frontend includes a client-generated \gls{uuid} called \texttt{actionId} in the \gls{json} request body.
+The backend validates the request, makes the necessary changes to the PostgreSQL database and then broadcasts the changes via the appropriate action to all open streams to the same map.
+\texttt{actionId} is generated by the frontend so that it can recognize and ignore its actions from own updates within the stream of incoming actions.
+
+% TODO: Expand background, add citations
+
+\chapter{Methodology}
+
+\section{Performance Evaluation}
+
+To evaluate the performance of the event broadcasting mechanism in the PermaplanT Map Editor, we conducted a series of performance tests while simulating an increasing number of concurrent users viewing the same map.
+These tests measure the response time for user requests.
+
+\subsection{Simulating Connections}
+To simulate multiple users viewing the same map, we developed a Python script \texttt{./connect\_listener.py}.
+\texttt{./connect\_listener.py} establishes concurrent connections to the event broadcasting service at the endpoint \texttt{/api/updates}.
+The number of connections and the nature of each connection can be configured through command-line arguments.
+We simulated 100 concurrent users on map with the ID of 1 on localhost by executing the following command: \texttt{python3 ./connect\_listener.py --url localhost --map\_id 1 100}.
+This initiates 100 Python threads (green threads), each of which opens an \gls{sse} connection.  
+
+\subsection{Simulating User Interaction with the Map}
+A second Python script emulates a user making modifications to the map.
+The script begins by creating a planting on the map and then continuously alters its position by sending an \gls{http} \texttt{PATCH} request to \texttt{api/maps/<MAP\_ID>/layers/plants/plantings}.
+
+It can be configured how many request the script makes.
+In our benchmark we used the invocation \texttt{python3 make\_requests.py --url localhost --map\_id 1 100} to make
+100 move requests - it delete the slowest and the fastest measurements and returns the average time each request takes to complete.
+
+\subsection{Tests}
+
+Each test is conducted by connecting a number of concurrent users while measuing the request times using the second script. The tests are run both locally and against the production server at \texttt{https://www.permaplant.net}.
+
+\section{Local tests}
+
+The local tests are run on a computer with the following specificaitons:
+\begin{itemize}
+  \item Operating System: Linux Mint 22 (Linux Kernal 6.8.0-45-generic)
+  \item CPU: Intel i7-5820K (12) @ 3600MHz
+  \item RAM: 16 GiB DDR4 @ 2133MHz
+  \item Storage: 120 GiB Solid State Drive
+\end{itemize}
+
+Each test follows the following steps:
+\begin{enumerate}
+    \item start the backend (release build)
+    \item use the python script to emulate connected users
+    E.g \texttt{./connect\_listener.py --map\_id 1 10} for 10 connections
+    \item In a different shell execute 200 requests \texttt{./make\_request.py 200}
+\end{enumerate}
+
+In order to try 2000 concurrent \gls{sse} connections locally we had to adjust the number of maximum open file descriptors using the \texttt{ulimit} command.
+The default for this limit on Linux Mint 22 is 1024 (shown by \texttt{ulimit -n}).
+We adjusted this limit to 3000 before simulating 2000 concurrent \gls{sse} connection.
+Without this adjustment Backend would log \texttt{Too many open files (os error 24)}.
+
+\section{Test against www.permaplant.net}
+
+Our production server is hosted on www.permaplant.net.
+On one computer we use the connection script while a different computer on a different network makes the requests.
+
+On the above mentioned computer we simulate our connected useres executing: 
+\begin{verbatim}
+# For 10 connections
+./connect\_listener.py \
+    --url https://www.permaplant.net \
+    --map\_id 79 \
+    --client\_id "PermaplanT-Prod" \
+    10 
+\end{verbatim}
+
+On a different computer (Thinkpad T470 i5-6300U) in a different network we simulate the requests:
+\texttt{./make\_request.py --url https://www.permaplant.net --map\_id 79 --client\_id "PermaplanT-Prod" 200}
+
+\section{Action Order Test}
+
+This test investigates whether actions may reach the client in a different order than the sequence in which their corresponding changes are committed to the database.
+To record planting position updates we added new table called \texttt{planting\_log} into our PostgreSQL database, that keeps a log of all moved plantings, with their old and new x and y coordinates.
+
+\begin{lstlisting}[language=sql]
+CREATE TABLE IF NOT EXISTS planting_log (
+    log_timestamp timestamptz DEFAULT clock_timestamp(),
+    planting_id uuid NOT NULL,
+    old_x int,
+    old_y int,
+    new_x int, kkm
+    new_y int,
+    PRIMARY KEY (log_timestamp, planting_id)
+);
+\end{lstlisting}
+
+A Trigger logs every update to the \texttt{plantings} table into \texttt{planting\_log}.
+
+\begin{lstlisting}[language=sql]
+CREATE TABLE IF NOT EXISTS planting_log (
+    log_timestamp timestamptz DEFAULT clock_timestamp(),
+    planting_id uuid NOT NULL,
+    old_x int,
+    old_y int,
+    new_x int,
+    new_y int,
+    PRIMARY KEY (log_timestamp, planting_id)
+);
+
+CREATE OR REPLACE FUNCTION log_planting_update()
+RETURNS trigger AS $$
+BEGIN
+    INSERT INTO planting_log (log_timestamp, planting_id, old_x, old_y, new_x, new_y)
+    VALUES (clock_timestamp(), OLD.id, OLD.x, OLD.y, NEW.x, NEW.y);
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER log_planting_update_trigger
+BEFORE UPDATE ON plantings
+FOR EACH ROW
+EXECUTE FUNCTION log_planting_update();
+\end{lstlisting}
+
+Using a similar connection script from the performance test we recorded all actions into a file. \texttt{./connect\_listener.py 1 1> ./target/actions.txt}
+
+We develped a script called \texttt{attack.py} that move a planting via the \gls{http} \texttt{patch} request.
+Lastly we extracted the database planting\_logs into a file with the same format as \texttt{actions.txt}.
+Each line is in the format planting\_id | x | y.
+We used the \texttt{diff} program to compare both files line by line.
+If we find that the order is not the same we reveal that there is a race condition and events are not sent in the correct order. 
+Note that the oposite is not the case: If the order of both files are the same the broadcasting system might not have race conditions or the test may be inadequat of showing it.
+
+\chapter{Results}
+
+The results clearly show that the current implementation of the broadcasting system can support 100 concurrent users.
+
+\section{Local tests}
+
+\begin{table}[h!]
+    \centering
+    \begin{tabular}{cc}
+        \toprule
+        \textbf{Connections} & \textbf{Avg Time (200 Requests) in ms} \\
+        \midrule
+        0 & 6.39 \\
+        10 & 6.20 \\
+        20 & 6.66 \\
+        50 & 6.50 \\
+        100 & 6.24 \\
+        150 & 6.86 \\
+        200 & 7.58 \\
+        500 & 9.85 \\
+        1000 & 10.97 \\
+        2000 & 10.10 \\
+        \bottomrule
+    \end{tabular}
+    \caption{Results of 200 Requests for Different Connection Counts}
+\end{table}
+
+An interesting note: When simulating 2000 concurrent connections the backend startet to report \texttt{Too many open files (os error 24)}.
+This is because the default for the the maximum number of open file descriptors per process on Linuxmint 22 is 1024.
+This can be found out by executing \texttt{ulimit -n}.
+
+
+\section{Test against www.permaplant.net}
+
+\begin{table}[h!]
+    \centering
+    \begin{tabular}{cc}
+        \toprule
+        \textbf{Connections} & \textbf{Avg Time (200 Requests) in ms} \\
+        \midrule
+        0 & 64.06 \\
+        10 & 60.24 \\
+        20 & 60.81 \\
+        50 & 61.52 \\
+        100 & 64.76 \\
+        150 & 64.55 \\
+        200 & 62.42 \\
+        \bottomrule
+    \end{tabular}
+    \caption{Results of 200 Requests for Remote Test}
+\end{table}
+
+\chapter{Discussion}
+
+\chapter{Additional Contributions}
+
+\section{Using Authentication with SSE}
+
+In the context of this investigation, we noticed that the current implementation of the broadcasting mechanism connecting to the \gls{http} endpoint \texttt{GET /api/updates/maps} was not secured with authentication.
+The native \gls{sse} handler called \texttt{EventSource} does not support custom headers, which meant we couldn't send and check authentication tokens.
+PermaplanT sends the \gls{http} header \texttt{Authorization: 'Bearer <token>'} (where token is a valid \texttt{JWT} token) with each request to prove to the backend, that the client is logged in.
+
+To solve this problem, we used a JavaScript package called \texttt{event-source-polyfill}, which is a polyfill that provides a JavaScript implements the \gls{sse} standard using the Fetch API. 
+This allows us to include the authentication token in our requests, enabling the security of the broadcasting mechanism.
+
+\printglossary[type=\acronymtype,title=Acronyms]
+
+\backmatter
+
+\bibliographystyle{alpha}
+\bibliography{thesis}
+
+\end{document}

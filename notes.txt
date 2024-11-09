@@ -1,0 +1,5 @@
+- Explain what response time and propagation delay is. (Probably background)
+- Why not take median, it does not have the problem with outliers and on uneven numbers is a real number from the measurements?
+- Move to methodology: An interesting note: When simulating 2000 concurrent connections the backend startet to report \texttt{Too many open files (os error 24)}.
+- Background should have citations!
+- Find related work
