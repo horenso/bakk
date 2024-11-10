@@ -1,4 +1,4 @@
-\documentclass[final,draft]{vutinfth} % Add option 'final' when done.
+\documentclass[final,draft,oneside]{vutinfth}
 
 % Load packages to allow in- and output of non-ASCII characters.
 \usepackage{lmodern}        % Use an extension of the original Computer Modern font to minimize the use of bitmapped letters.
@@ -6,22 +6,17 @@
 \usepackage[utf8]{inputenc} % Determines encoding of the input. All input files have to use UTF8 encoding.
 
 % Extended LaTeX functionality is enables by including packages with \usepackage{...}.
-\usepackage{amsmath}    % Extended typesetting of mathematical expression.
-\usepackage{amssymb}    % Provides a multitude of mathematical symbols.
-\usepackage{mathtools}  % Further extensions of mathematical typesetting.
-\usepackage{microtype}  % Small-scale typographic enhancements.
 \usepackage[inline]{enumitem} % User control over the layout of lists (itemize, enumerate, description).
 \usepackage{multirow}   % Allows table elements to span several rows.
 \usepackage{booktabs}   % Improves the typesetting of tables.
 \usepackage{subcaption} % Allows the use of subfigures and enables their referencing.
-\usepackage[ruled,linesnumbered,algochapter]{algorithm2e} % Enables the writing of pseudo code.
 \usepackage{minted}
 \usepackage[usenames,dvipsnames,table]{xcolor} % Allows the definition and use of colors. This package has to be included before tikz.
 \usepackage{nag}       % Issues warnings when best practices in writing LaTeX documents are violated.
 \usepackage{todonotes} % Provides tooltip-like todo notes.
 \usepackage{hyperref}  % Enables hyperlinking in the electronic document version. This package has to be included second to last.
 \usepackage[acronym,toc]{glossaries} % Enables the generation of glossaries and lists of acronyms. This package has to be included last.
-\usepackage{listings} % Code
+\usepackage{listings, listings-rust} % Code
 \lstset{
     basicstyle=\ttfamily,
     keywordstyle=\color{blue},
@@ -106,55 +101,97 @@ TODO: acknowledgments
 
 \section{PermaplanT}
 
-PermaplanT (\texttt{https://www.permaplant.net}) is an innovative web application that strives to help users plan gardening spaces following the principles of permaculture.
-The application follows a classic web application architecture, consisting of a client-side frontend running in the user's web browser and a server-side backend.
-The frontend is built with JavaScript and the React framework, while the backend is developed in the Rust, backed by the relational database PostgreSQL for data storage.
-Additionally, PermaplanT features a dataset of about 10.000 plant entries with information about life cycles, fertility, light and water needs, and plant relationships.
+PermaplanT (\url{https://www.permaplant.net}) is an innovative web application that strives to help users plan gardening spaces following the principles of permaculture.
+The application uses a classic web application architecture, consisting of a client-side frontend running in the user's web browser and a server-side backend.
+The frontend is built using JavaScript and the React framework, while the backend is developed in Rust, backed by the relational database PostgreSQL for data storage.
+In addition to the actual application, PermaplanT features a dataset of about 10,000 plant records with information about life cycles, fertility, light and water requirements, and plant relationships.
 
 \section{The Collaborative Map Editor}
 
 The central feature of PermaplanT is its Map Editor, a garden planning tool that allows users to add, remove, and manage garden elements including plants, soil textures, and shading.
-To support collaborative garden planning, the Map Editor is fully synchronized: changes made by one user are reflected in real-time on all clients viewing the same map.
+To support collaborative garden design, the Map Editor is fully synchronized, so that changes made by one user are reflected in real time on all clients viewing the same map. This is achieved by sending change events, which we will refer to as \emph{actions}.
 
 \section{Research Objective}
 
-In this thesis, we will evaluate the performance and correctness of the event broadcasting mechanism within the PermaplanT Map Editor.
-One of PermaplanT's non-functional requirements is to support up to 100 concurrent users making changes to the same map without degradation in response times.
-We will test if the current implementation of the event broadcasting mechanism requirement adequately achieved this scalability target.
+In this thesis, we will evaluate the performance and correctness of the action broadcasting mechanism within the PermaplanT Map Editor.
+One of the non-functional requirements of PermaplanT is to support up to 100 concurrent users making changes to the same map without degrading in response times.
+We will test whether the current implementation of the action broadcasting mechanism adequately achieves this scalability goal.
 
-In terms of correctness, we will assess whether the sequence of database updates aligns with the sequence of actions, ensuring that the map state stays consistent with the database.
+In terms of correctness, we will test if the sequence of database updates aligns with the sequence of actions that the client receives.
+If actions could arrive out of order and these actions are order-dependent then the state of the client and the state of the database will become inconsistent until the user refreshes the Map Editor page.
 
-Our research will specifically address:
+In summary, this thesis will awnser:
 \begin{enumerate}
-  \item \textbf{Performance}: How much longer do requests take to complete when there are more observers receiving updates?
-  \item \textbf{Correctness}: Does the order of actions reflect correctly on the client side to prevent discrepancies between the client and server map states?”
+  \item \textbf{Performance}: How much longer do requests take to complete relative to how more observers receiving updates?
+  \item \textbf{Correctness}: Is the order of actions, that the client reseives, always in the same order as the respective database writes? 
 \end{enumerate}
 
 \chapter{Background}
 
 \section{Broadcasting mechanism}
 
-When a user opens the Map Editor in their web browser, the frontend sends a \texttt{GET} request to the \gls{http} endpoint \texttt{/api/updates/maps}.
+When a user opens the Map Editor in their web browser, the frontend sends a \texttt{GET} request to the \gls{http} endpoint at the url \url{/api/updates/maps}.
 This establishes a unidirectonal stream from the server to the client using \gls{sse}.
-If \gls{sse} is unavailable the server uses long-polling over \gls{http} to maintain a continuous connection.
-Through this data stream, the client receives map update in \gls{json} format referred to as \emph{actions} within PermaplanT.
+Through this data stream, the client receives map updates in the \gls{json} format referred to as \emph{actions} within PermaplanT.
 Each action has a \texttt{type} field, which defines what information it carries.
 For example, actions that affect plantings on the map include the following types:
 \begin{itemize}
-    \item \texttt{"CreatePlanting"} Creates one ore more new plantings
-    \item \texttt{"MovePlanting"} Updates the 2-dimentional position of one or more plantings on the map
-    \item\texttt{"TransformPlanting"} Changes the size of one or more plantings on the map
+    \item \texttt{CreatePlanting} creates one or more new plantings.
+    \item \texttt{MovePlanting} updates the position (x,y) of one or more plantings on the map.
+    \item\texttt{TransformPlanting} changes the size of one or more plantings on the map.
 \end{itemize}
 
 For each \gls{http} endpoint that modifies the state of the map, the frontend includes a client-generated \gls{uuid} called \texttt{actionId} in the \gls{json} request body.
 The backend validates the request, makes the necessary changes to the PostgreSQL database and then broadcasts the changes via the appropriate action to all open streams to the same map.
-\texttt{actionId} is generated by the frontend so that it can recognize and ignore its actions from own updates within the stream of incoming actions.
+\texttt{actionId} is generated by the frontend so that the client can recognize and ignore actions that were caused by its own updates. 
 
-% TODO: Expand background, add citations
+\section{Asynchronous Rust and the Broadcasting Mechanism}
+
+Rust's approach to asynchronous programming is to compile each asynchronous function into a state machine that represents each entry point recursively.
+Rust does not provide a standard event loop itself, so we use the popular runtime \texttt{tokio} to supply the event loop and manage asynchronous tasks.
+
+The broadcasting mechanism uses an \texttt{Arc<Mutex<HashMap<i32, ConnectedMaps>>>}, where \texttt{ConnectedMaps} contains a \texttt{Vec<sse::Sender>}.
+This structure enables sharing of map connections across multiple threads while ensuring thread safety. 
+
+All \gls{http} updates in the backend follow the steps of this simpified Rust illustration: 
+
+\begin{lstlisting}[language=rust]
+{
+    // Updates the database
+    let updated_planting = plantings::update().await;
+    // Send out the update via Server Sent Events
+    broadcaster.broadcast(updated_planting).await;
+    // Finishes the HTTP request
+    return HttpResponse::Ok().json(updated_plantings);
+}
+\end{lstlisting}
+
+In this process, the broadcaster acquires a lock from the mutex to safely send updates to all connected maps via \gls{sse}. However, because Rust's asynchronous functions give-up control when they encounter an \texttt{await}, other tasks can run while waiting.
+This means that another update request might be quick enough to complete its own \texttt{database\_update.await} and queue a broadcast before the previous broadcast has finished.
+Thus, there is potential for broadcasts to be out of sync with the database state, particularly if actions are order-dependent.
+To illustate the race condition:
+\begin{itemize}
+    \item User 1 makes a request to move a planting to (100, 100).
+    \item User 2 makes a request to move the same planting to (200, 200).
+    \item \texttt{plantings::update().await} finishes and stores (100, 100) into the database.
+    \item The request of User 2 is quick enough to schedule itself next in the event loop. (200, 200) are both persisted to the database and also sent out via the broadcaster.
+    \item Finally (100, 100) is sent out by the broadcaster.
+\end{itemize}
+
+This way the final entry in the database is (200, 200) but the actions are sent in this order: (200, 200) and then (100, 100).
+
+The specific motivations for testing are as follows:
+\begin{itemize}
+    \item \textbf{Performance Motivation:} The \gls{http} request does not return until \texttt{broadcaster.await} concludes, so the latency of each request may increase with the number of \gls{sse} connections.
+    We aim to determine how response times scale as more observers receive updates.
+    \item \textbf{Correctness Motivation:} Since there is no critical section around the two \texttt{await} calls, an update can complete and another can begin in the middle of the \texttt{database\_update} and \texttt{broadcast} sequence.
+    This could cause out-of-order broadcasts, where the \texttt{updated\_data} sent to clients does not align with the current database state.
+    If the actions are order-dependent, this misalignment could create inconsistencies between the client and database states.
+\end{itemize}
 
 \chapter{Methodology}
 
-\section{Performance Evaluation}
+\section{Performance Test}
 
 To evaluate the performance of the event broadcasting mechanism in the PermaplanT Map Editor, we conducted a series of performance tests while simulating an increasing number of concurrent users viewing the same map.
 These tests measure the response time for user requests.
@@ -163,7 +200,10 @@ These tests measure the response time for user requests.
 To simulate multiple users viewing the same map, we developed a Python script \texttt{./connect\_listener.py}.
 \texttt{./connect\_listener.py} establishes concurrent connections to the event broadcasting service at the endpoint \texttt{/api/updates}.
 The number of connections and the nature of each connection can be configured through command-line arguments.
-We simulated 100 concurrent users on map with the ID of 1 on localhost by executing the following command: \texttt{python3 ./connect\_listener.py --url localhost --map\_id 1 100}.
+We simulated 100 concurrent users on map with the ID of 1 on localhost by executing the following command: 
+\begin{lstlisting}[language=sh]
+python3 ./connect\_listener.py --url localhost --map\_id 1 100
+\end{lstlisting}
 This initiates 100 Python threads (green threads), each of which opens an \gls{sse} connection.  
 
 \subsection{Simulating User Interaction with the Map}
@@ -277,7 +317,8 @@ Note that the oposite is not the case: If the order of both files are the same t
 
 The results clearly show that the current implementation of the broadcasting system can support 100 concurrent users.
 
-\section{Local tests}
+\section{Performance Test}
+\subsection{Local tests}
 
 \begin{table}[h!]
     \centering
@@ -305,7 +346,7 @@ This is because the default for the the maximum number of open file descriptors 
 This can be found out by executing \texttt{ulimit -n}.
 
 
-\section{Test against www.permaplant.net}
+\subsection{Test against www.permaplant.net}
 
 \begin{table}[h!]
     \centering
@@ -325,18 +366,13 @@ This can be found out by executing \texttt{ulimit -n}.
     \caption{Results of 200 Requests for Remote Test}
 \end{table}
 
+\section{Action Order Test}
+
 \chapter{Discussion}
 
-\chapter{Additional Contributions}
+\section{Performance Test}
 
-\section{Using Authentication with SSE}
-
-In the context of this investigation, we noticed that the current implementation of the broadcasting mechanism connecting to the \gls{http} endpoint \texttt{GET /api/updates/maps} was not secured with authentication.
-The native \gls{sse} handler called \texttt{EventSource} does not support custom headers, which meant we couldn't send and check authentication tokens.
-PermaplanT sends the \gls{http} header \texttt{Authorization: 'Bearer <token>'} (where token is a valid \texttt{JWT} token) with each request to prove to the backend, that the client is logged in.
-
-To solve this problem, we used a JavaScript package called \texttt{event-source-polyfill}, which is a polyfill that provides a JavaScript implements the \gls{sse} standard using the Fetch API. 
-This allows us to include the authentication token in our requests, enabling the security of the broadcasting mechanism.
+\section{Action Order Test}
 
 \printglossary[type=\acronymtype,title=Acronyms]
 
