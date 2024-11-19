@@ -120,10 +120,10 @@ We will test whether the current implementation of the action broadcasting mecha
 In terms of correctness, we will test if the sequence of database updates aligns with the sequence of actions that the client receives.
 If actions could arrive out of order and these actions are order-dependent then the state of the client and the state of the database will become inconsistent until the user refreshes the Map Editor page.
 
-In summary, this thesis will awnser:
+In summary, this thesis will answer:
 \begin{enumerate}
   \item \textbf{Performance}: How much longer do requests take to complete relative to how more observers receiving updates?
-  \item \textbf{Correctness}: Is the order of actions, that the client reseives, always in the same order as the respective database writes? 
+  \item \textbf{Correctness}: Is the order of actions, that the client receives, always in the same order as the respective database writes? 
 \end{enumerate}
 
 \chapter{Background}
@@ -131,7 +131,7 @@ In summary, this thesis will awnser:
 \section{Broadcasting mechanism}
 
 When a user opens the Map Editor in their web browser, the frontend sends a \texttt{GET} request to the \gls{http} endpoint at the url \url{/api/updates/maps}.
-This establishes a unidirectonal stream from the server to the client using \gls{sse}.
+This establishes a unidirectional stream from the server to the client using \gls{sse}.
 Through this data stream, the client receives map updates in the \gls{json} format referred to as \emph{actions} within PermaplanT.
 Each action has a \texttt{type} field, which defines what information it carries.
 For example, actions that affect plantings on the map include the following types:
@@ -153,7 +153,7 @@ Rust does not provide a standard event loop itself, so we use the popular runtim
 The broadcasting mechanism uses an \texttt{Arc<Mutex<HashMap<i32, ConnectedMaps>>>}, where \texttt{ConnectedMaps} contains a \texttt{Vec<sse::Sender>}.
 This structure enables sharing of map connections across multiple threads while ensuring thread safety. 
 
-All \gls{http} updates in the backend follow the steps of this simpified Rust illustration: 
+All \gls{http} updates in the backend follow the steps of this simplified Rust illustration: 
 
 \begin{lstlisting}[language=rust]
 {
@@ -169,7 +169,7 @@ All \gls{http} updates in the backend follow the steps of this simpified Rust il
 In this process, the broadcaster acquires a lock from the mutex to safely send updates to all connected maps via \gls{sse}. However, because Rust's asynchronous functions give-up control when they encounter an \texttt{await}, other tasks can run while waiting.
 This means that another update request might be quick enough to complete its own \texttt{database\_update.await} and queue a broadcast before the previous broadcast has finished.
 Thus, there is potential for broadcasts to be out of sync with the database state, particularly if actions are order-dependent.
-To illustate the race condition:
+To illustrate the race condition:
 \begin{itemize}
     \item User 1 makes a request to move a planting to (100, 100).
     \item User 2 makes a request to move the same planting to (200, 200).
@@ -216,13 +216,13 @@ In our benchmark we used the invocation \texttt{python3 make\_requests.py --url 
 
 \subsection{Tests}
 
-Each test is conducted by connecting a number of concurrent users while measuing the request times using the second script. The tests are run both locally and against the production server at \texttt{https://www.permaplant.net}.
+Each test is conducted by connecting a number of concurrent users while measuring the request times using the second script. The tests are run both locally and against the production server at \texttt{https://www.permaplant.net}.
 
 \section{Local tests}
 
-The local tests are run on a computer with the following specificaitons:
+The local tests are run on a computer with the following specifications:
 \begin{itemize}
-  \item Operating System: Linux Mint 22 (Linux Kernal 6.8.0-45-generic)
+  \item Operating System: Linux Mint 22 (Linux Kernel 6.8.0-45-generic)
   \item CPU: Intel i7-5820K (12) @ 3600MHz
   \item RAM: 16 GiB DDR4 @ 2133MHz
   \item Storage: 120 GiB Solid State Drive
@@ -246,7 +246,7 @@ Without this adjustment Backend would log \texttt{Too many open files (os error 
 Our production server is hosted on www.permaplant.net.
 On one computer we use the connection script while a different computer on a different network makes the requests.
 
-On the above mentioned computer we simulate our connected useres executing: 
+On the above mentioned computer we simulate our connected users with this invocation: 
 \begin{verbatim}
 # For 10 connections
 ./connect\_listener.py \
@@ -306,12 +306,12 @@ EXECUTE FUNCTION log_planting_update();
 
 Using a similar connection script from the performance test we recorded all actions into a file. \texttt{./connect\_listener.py 1 1> ./target/actions.txt}
 
-We develped a script called \texttt{attack.py} that move a planting via the \gls{http} \texttt{patch} request.
+We developed a script called \texttt{attack.py} that move a planting via the \gls{http} \texttt{patch} request.
 Lastly we extracted the database planting\_logs into a file with the same format as \texttt{actions.txt}.
 Each line is in the format planting\_id | x | y.
 We used the \texttt{diff} program to compare both files line by line.
 If we find that the order is not the same we reveal that there is a race condition and events are not sent in the correct order. 
-Note that the oposite is not the case: If the order of both files are the same the broadcasting system might not have race conditions or the test may be inadequat of showing it.
+Note that the opposite is not the case: If the order of both files are the same the broadcasting system might not have race conditions or the test may be inadequate of showing it.
 
 \chapter{Results}
 
@@ -341,7 +341,7 @@ The results clearly show that the current implementation of the broadcasting sys
     \caption{Results of 200 Requests for Different Connection Counts}
 \end{table}
 
-An interesting note: When simulating 2000 concurrent connections the backend startet to report \texttt{Too many open files (os error 24)}.
+An interesting note: When simulating 2000 concurrent connections the backend started to report \texttt{Too many open files (os error 24)}.
 This is because the default for the the maximum number of open file descriptors per process on Linuxmint 22 is 1024.
 This can be found out by executing \texttt{ulimit -n}.
 
@@ -368,11 +368,18 @@ This can be found out by executing \texttt{ulimit -n}.
 
 \section{Action Order Test}
 
+The test moved the same planting on the same time 20,000 in parallel.
+On a local setup the likelihood of events out of order increased when we connected more listeners.
+With 400 additional connections (+ a 401st connection that keeps track of the received events) there were 34 action received in the wrong order.
+
 \chapter{Discussion}
 
 \section{Performance Test}
 
 \section{Action Order Test}
+
+While the conditions of the test were intentionally designed to trigger the data race, it is questionable whether the data race would happen under read use.
+Nevertheless we were able to prove that actions are not guaranteed to be sent out in the correct order.
 
 \printglossary[type=\acronymtype,title=Acronyms]
 
