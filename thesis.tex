@@ -16,7 +16,8 @@
 \usepackage{todonotes} % Provides tooltip-like todo notes.
 \usepackage{hyperref}  % Enables hyperlinking in the electronic document version. This package has to be included second to last.
 \usepackage[acronym,toc]{glossaries} % Enables the generation of glossaries and lists of acronyms. This package has to be included last.
-\usepackage{listings, listings-rust} % Code
+\usepackage{listings, listings-rust, listings-json} % Code
+\usepackage{xcolor}
 \lstset{
     basicstyle=\ttfamily,
     keywordstyle=\color{blue},
@@ -29,6 +30,7 @@
 \newcommand{\authorname}{Jannis Adamek}
 \newcommand{\thesistitle}{TODO: title}
 \newcommand{\thesistitlegerman}{TODO: title deutsch}
+\newcommand{\rustsnippet}[1]{\lstinline[language=rust]{#1}}
 
 % Set PDF document properties
 \hypersetup{
@@ -81,7 +83,7 @@ TODO: acknowledgments
 \end{acknowledgements*}
 
 \begin{abstract}
-    PermaplanT is a web application for collaborative online garden planing. TODO: write abstract
+    PermaplanT is a web application for collaborative online garden planning. TODO: write abstract
 \end{abstract}
 
 \selectlanguage{english}
@@ -102,7 +104,7 @@ TODO: acknowledgments
 \section{PermaplanT}
 
 PermaplanT (\url{https://www.permaplant.net}) is an innovative web application that strives to help users plan gardening spaces following the principles of permaculture.
-The application uses a classic web application architecture, consisting of a client-side frontend running in the user's web browser and a server-side backend.
+The application uses a classic web application architecture consisting of a client-side frontend running in the user's web browser and a server-side backend.
 The frontend is built using JavaScript and the React framework, while the backend is developed in Rust, backed by the relational database PostgreSQL for data storage.
 In addition to the actual application, PermaplanT features a dataset of about 10,000 plant records with information about life cycles, fertility, light and water requirements, and plant relationships.
 
@@ -113,17 +115,18 @@ To support collaborative garden design, the Map Editor is fully synchronized, so
 
 \section{Research Objective}
 
-In this thesis, we will evaluate the performance and correctness of the action broadcasting mechanism within the PermaplanT Map Editor.
-One of the non-functional requirements of PermaplanT is to support up to 100 concurrent users making changes to the same map without degrading in response times.
+In this thesis, we evaluate the performance and correctness of the action broadcasting mechanism within the PermaplanT Map Editor.
+One of the nonfunctional requirements of PermaplanT is to support up to 100 concurrent users making changes to the same map without degrading in response times.
 We will test whether the current implementation of the action broadcasting mechanism adequately achieves this scalability goal.
 
 In terms of correctness, we will test if the sequence of database updates aligns with the sequence of actions that the client receives.
-If actions could arrive out of order and these actions are order-dependent then the state of the client and the state of the database will become inconsistent until the user refreshes the Map Editor page.
+Some actions are order-dependent, e.g. two actions that move the same planting to an absolute position, or an action that moves a planting and another that delets the same planting. If actions can arrive out of order, then the state of the client and the state of the database will become inconsistent until the user refreshes the Map Editor page.
 
-In summary, this thesis will answer:
+In summary, this thesis answers the following questions:
 \begin{enumerate}
-  \item \textbf{Performance}: How much longer do requests take to complete relative to how more observers receiving updates?
-  \item \textbf{Correctness}: Is the order of actions, that the client receives, always in the same order as the respective database writes? 
+% TODO: The terms are not clear yet. What is request, what are updates? Is there no action involved here?
+  \item \textbf{Performance}: How long do requests take to complete in relation to the number of observers receiving actions?
+  \item \textbf{Correctness}: Is the order of actions that the client receives always in the same order as the respective database writes? 
 \end{enumerate}
 
 \chapter{Background}
@@ -132,7 +135,7 @@ In summary, this thesis will answer:
 
 When a user opens the Map Editor in their web browser, the frontend sends a \texttt{GET} request to the \gls{http} endpoint at the url \url{/api/updates/maps}.
 This establishes a unidirectional stream from the server to the client using \gls{sse}.
-Through this data stream, the client receives map updates in the \gls{json} format referred to as \emph{actions} within PermaplanT.
+Through this stream, the client receives map updates in the format \gls{json} referred to as \emph{actions} within PermaplanT.
 Each action has a \texttt{type} field, which defines what information it carries.
 For example, actions that affect plantings on the map include the following types:
 \begin{itemize}
@@ -142,16 +145,43 @@ For example, actions that affect plantings on the map include the following type
 \end{itemize}
 
 For each \gls{http} endpoint that modifies the state of the map, the frontend includes a client-generated \gls{uuid} called \texttt{actionId} in the \gls{json} request body.
-The backend validates the request, makes the necessary changes to the PostgreSQL database and then broadcasts the changes via the appropriate action to all open streams to the same map.
-\texttt{actionId} is generated by the frontend so that the client can recognize and ignore actions that were caused by its own updates. 
+The backend validates the request, makes the necessary changes to the PostgreSQL database, and then broadcasts the changes via the appropriate action to all open streams that belong to the same map.
+\texttt{actionId} is generated by the frontend so that the client can recognize and ignore actions that were caused by its own updates.
+
+To move one or more plantings the client makes an \gls{http} \texttt{PATCH} request to \texttt{/api/maps/{map\_id}/layers/plants/plantings} with
+
+\lstset{
+  basicstyle=\ttfamily,
+  keywordstyle=\color{blue},
+  stringstyle=\color{green},
+  commentstyle=\color{gray},
+  showstringspaces=false,
+  moredelim=[is][\color{red}\bfseries]{<}{>} % Style text between < and >
+}
+
+\begin{lstlisting}[language=json]
+{
+  "actionId": "<action_id>",
+  "dto": {
+    "type": "move",
+    "content": [
+      {
+        "id": "<planting_uuid_1>",
+        "x": 10,
+        "y": 10
+      },
+      {
+        "id": "<planting_uuid_2>",
+        "x": 20,
+        "y": 20
+      }
+    ]
+  }
+}
+\end{lstlisting}
+
 
 \section{Asynchronous Rust and the Broadcasting Mechanism}
-
-Rust's approach to asynchronous programming is to compile each asynchronous function into a state machine that represents each entry point recursively.
-Rust does not provide a standard event loop itself, so we use the popular runtime \texttt{tokio} to supply the event loop and manage asynchronous tasks.
-
-The broadcasting mechanism uses an \texttt{Arc<Mutex<HashMap<i32, ConnectedMaps>>>}, where \texttt{ConnectedMaps} contains a \texttt{Vec<sse::Sender>}.
-This structure enables sharing of map connections across multiple threads while ensuring thread safety. 
 
 All \gls{http} updates in the backend follow the steps of this simplified Rust illustration: 
 
@@ -166,20 +196,27 @@ All \gls{http} updates in the backend follow the steps of this simplified Rust i
 }
 \end{lstlisting}
 
-In this process, the broadcaster acquires a lock from the mutex to safely send updates to all connected maps via \gls{sse}. However, because Rust's asynchronous functions give-up control when they encounter an \texttt{await}, other tasks can run while waiting.
-This means that another update request might be quick enough to complete its own \texttt{database\_update.await} and queue a broadcast before the previous broadcast has finished.
-Thus, there is potential for broadcasts to be out of sync with the database state, particularly if actions are order-dependent.
-To illustrate the race condition:
+Rust's approach to asynchronous programming is to compile each asynchronous function into a state machine that represents each entry point\cite{rustasyncdeepdive2024}.
+Rust does not provide a standard event loop itself; we use the runtime \texttt{tokio}\cite{tokiocrate} to supply the event loop and manage asynchronous tasks.
+
+The broadcaster itself is thread-safe, even if multiple requests running in multiple threads call \texttt{broadcaster.broadcast()}, an internal mutex gurantees that one broadcast happens at one time.
+However, because Rust's asynchronous functions give up control, other tasks may run in between two \rustsnippet{await} statements.
+This means that another update request might be quick enough to complete its own \texttt{database\_update.await} and invoke \texttt{broadcaster.broadcast()} before this request continues execution after the first \texttt{await}. 
+To illustrate the race condition,
 \begin{itemize}
     \item User 1 makes a request to move a planting to (100, 100).
     \item User 2 makes a request to move the same planting to (200, 200).
-    \item \texttt{plantings::update().await} finishes and stores (100, 100) into the database.
+    \item \texttt{plantings::update().await} finishes and stores (100, 100) in to the database.
     \item The request of User 2 is quick enough to schedule itself next in the event loop. (200, 200) are both persisted to the database and also sent out via the broadcaster.
     \item Finally (100, 100) is sent out by the broadcaster.
 \end{itemize}
 
-This way the final entry in the database is (200, 200) but the actions are sent in this order: (200, 200) and then (100, 100).
+This way, the final entry in the database is (200, 200) but the actions are sent in this order: (200, 200) and then (100, 100).
+The client incorrectly displays the planting at (100, 100). 
 
+\section{Motivation}
+
+% TODO: What testing do I mean?
 The specific motivations for testing are as follows:
 \begin{itemize}
     \item \textbf{Performance Motivation:} The \gls{http} request does not return until \texttt{broadcaster.await} concludes, so the latency of each request may increase with the number of \gls{sse} connections.
@@ -212,7 +249,7 @@ The script begins by creating a planting on the map and then continuously alters
 
 It can be configured how many request the script makes.
 In our benchmark we used the invocation \texttt{python3 make\_requests.py --url localhost --map\_id 1 100} to make
-100 move requests - it delete the slowest and the fastest measurements and returns the average time each request takes to complete.
+100 move requests - it deletes the slowest and the fastest measurements and returns the average time each request takes to complete.
 
 \subsection{Tests}
 
@@ -266,7 +303,7 @@ To record planting position updates we added new table called \texttt{planting\_
 
 \begin{lstlisting}[language=sql]
 CREATE TABLE IF NOT EXISTS planting_log (
-    log_timestamp timestamptz DEFAULT clock_timestamp(),
+    log_timestamp timestamp DEFAULT clock_timestamp(),
     planting_id uuid NOT NULL,
     old_x int,
     old_y int,
@@ -276,11 +313,11 @@ CREATE TABLE IF NOT EXISTS planting_log (
 );
 \end{lstlisting}
 
-A Trigger logs every update to the \texttt{plantings} table into \texttt{planting\_log}.
+A trigger logs every update to the \texttt{plantings} table into \texttt{planting\_log}.
 
 \begin{lstlisting}[language=sql]
 CREATE TABLE IF NOT EXISTS planting_log (
-    log_timestamp timestamptz DEFAULT clock_timestamp(),
+    log_timestamp timestamp DEFAULT clock_timestamp(),
     planting_id uuid NOT NULL,
     old_x int,
     old_y int,
@@ -378,7 +415,7 @@ With 400 additional connections (+ a 401st connection that keeps track of the re
 
 \section{Action Order Test}
 
-While the conditions of the test were intentionally designed to trigger the data race, it is questionable whether the data race would happen under read use.
+While the conditions of the test were intentionally designed to trigger the data race, it is questionable whether the data race would happen under real use.
 Nevertheless we were able to prove that actions are not guaranteed to be sent out in the correct order.
 
 \printglossary[type=\acronymtype,title=Acronyms]
