@@ -1,4 +1,4 @@
-\documentclass[final,draft,oneside]{vutinfth}
+\documentclass[final,oneside]{vutinfth}
 
 % Load packages to allow in- and output of non-ASCII characters.
 \usepackage{lmodern}        % Use an extension of the original Computer Modern font to minimize the use of bitmapped letters.
@@ -16,8 +16,8 @@
 \usepackage{todonotes} % Provides tooltip-like todo notes.
 \usepackage{hyperref}  % Enables hyperlinking in the electronic document version. This package has to be included second to last.
 \usepackage[acronym,toc]{glossaries} % Enables the generation of glossaries and lists of acronyms. This package has to be included last.
-\usepackage{listings, listings-rust, listings-json} % Code
-\usepackage{xcolor}
+\usepackage{listings, listings-rust, listings-json, listings-url} % Code
+\usepackage{hyperref}
 \lstset{
     basicstyle=\ttfamily,
     keywordstyle=\color{blue},
@@ -30,7 +30,11 @@
 \newcommand{\authorname}{Jannis Adamek}
 \newcommand{\thesistitle}{TODO: title}
 \newcommand{\thesistitlegerman}{TODO: title deutsch}
+
 \newcommand{\rustsnippet}[1]{\lstinline[language=rust]{#1}}
+\newcommand{\bashsnippet}[1]{\lstinline[language=bash]{#1}}
+\newcommand{\pythonsnippet}[1]{\lstinline[language=python]{#1}}
+\newcommand{\urlsnippet}[1]{\lstinline[language=url]{#1}}
 
 % Set PDF document properties
 \hypersetup{
@@ -89,10 +93,12 @@ TODO: acknowledgments
 \selectlanguage{english}
 
 % Acronyms go here
+\newacronym{tcp}{TCP}{Transmission Control Protocol}
 \newacronym{http}{HTTP}{Hypertext Transfer Protocol}
 \newacronym{sse}{SSE}{Server Sent Events}
 \newacronym{json}{JSON}{JavaScript Object Notation}
 \newacronym{uuid}{UUID}{Universally Unique Identifier}
+\newacronym{io}{I/O}{Input Output}
 
 \tableofcontents % Starred version, i.e., \tableofcontents*, removes the self-entry.
 
@@ -116,24 +122,24 @@ To support collaborative garden design, the Map Editor is fully synchronized, so
 \section{Research Objective}
 
 In this thesis, we evaluate the performance and correctness of the action broadcasting mechanism within the PermaplanT Map Editor.
-One of the nonfunctional requirements of PermaplanT is to support up to 100 concurrent users making changes to the same map without degrading in response times.
-We will test whether the current implementation of the action broadcasting mechanism adequately achieves this scalability goal.
+One of PermaplanT's non-functional requirements is to support up to 100 concurrent users making changes to the same map without degrading in response times.
+We test whether the current implementation of the action broadcasting mechanism adequately achieves this scalability goal.
 
 In terms of correctness, we will test if the sequence of database updates aligns with the sequence of actions that the client receives.
-Some actions are order-dependent, e.g. two actions that move the same planting to an absolute position, or an action that moves a planting and another that delets the same planting. If actions can arrive out of order, then the state of the client and the state of the database will become inconsistent until the user refreshes the Map Editor page.
+Some actions are order-dependent, e.g. two actions that move the same planting to an absolute position, or an action that moves a planting and another that delets the same planting.
+If actions can arrive out of order, then the state of the client and the state of the database will become inconsistent until the user refreshes the Map Editor page.
 
 In summary, this thesis answers the following questions:
 \begin{enumerate}
-% TODO: The terms are not clear yet. What is request, what are updates? Is there no action involved here?
-  \item \textbf{Performance}: How long do requests take to complete in relation to the number of observers receiving actions?
+  \item \textbf{Performance}: How does the duration of \gls{http} requests that modify the state of a map correlate with the number of observers receiving the broadcasted actions on the same map?
   \item \textbf{Correctness}: Is the order of actions that the client receives always in the same order as the respective database writes? 
 \end{enumerate}
 
 \chapter{Background}
 
-\section{Broadcasting mechanism}
+\section{Map Updates and State Broadcasting}
 
-When a user opens the Map Editor in their web browser, the frontend sends a \texttt{GET} request to the \gls{http} endpoint at the url \url{/api/updates/maps}.
+When a user opens the Map Editor in their web browser, the frontend sends a \texttt{GET} request to the \gls{http} endpoint at the URL \urlsnippet{/api/updates/maps}.
 This establishes a unidirectional stream from the server to the client using \gls{sse}.
 Through this stream, the client receives map updates in the format \gls{json} referred to as \emph{actions} within PermaplanT.
 Each action has a \texttt{type} field, which defines what information it carries.
@@ -144,21 +150,15 @@ For example, actions that affect plantings on the map include the following type
     \item\texttt{TransformPlanting} changes the size of one or more plantings on the map.
 \end{itemize}
 
-For each \gls{http} endpoint that modifies the state of the map, the frontend includes a client-generated \gls{uuid} called \texttt{actionId} in the \gls{json} request body.
+For each \gls{http} endpoint that modifies the state of the map, the frontend includes a client-generated \gls{uuid} called \texttt{actionId} in the request body.
 The backend validates the request, makes the necessary changes to the PostgreSQL database, and then broadcasts the changes via the appropriate action to all open streams that belong to the same map.
 \texttt{actionId} is generated by the frontend so that the client can recognize and ignore actions that were caused by its own updates.
 
-To move one or more plantings the client makes an \gls{http} \texttt{PATCH} request to \texttt{/api/maps/{map\_id}/layers/plants/plantings} with
+\subsection{Map Update Example}
 
-\lstset{
-  basicstyle=\ttfamily,
-  keywordstyle=\color{blue},
-  stringstyle=\color{green},
-  commentstyle=\color{gray},
-  showstringspaces=false,
-  moredelim=[is][\color{red}\bfseries]{<}{>} % Style text between < and >
-}
+For example, to move one or more plantings, the client makes an \gls{http} \texttt{PATCH} request to \urlsnippet{/api/maps/<map_id>/layers/plants/plantings} with the desired map identifier and the following \gls{json} payload.
 
+\begin{minipage}{\linewidth}
 \begin{lstlisting}[language=json]
 {
   "actionId": "<action_id>",
@@ -179,54 +179,109 @@ To move one or more plantings the client makes an \gls{http} \texttt{PATCH} requ
   }
 }
 \end{lstlisting}
+\end{minipage}
 
+This request sets the absolute positions of two plantings.
 
-\section{Asynchronous Rust and the Broadcasting Mechanism}
+\section{Race Condition in the Broadcasting Mechanism}
 
-All \gls{http} updates in the backend follow the steps of this simplified Rust illustration: 
+All \gls{http} endpoints in the backend follow the steps of the following simplified illustration in Rust.
 
+\begin{minipage}{\linewidth}
 \begin{lstlisting}[language=rust]
-{
-    // Updates the database
-    let updated_planting = plantings::update().await;
-    // Send out the update via Server Sent Events
-    broadcaster.broadcast(updated_planting).await;
+async update_plantings(
+    map_id: i32,
+    update: UpdatePlantingDto,
+) -> Result<HttpResponse> {
+    // Updates the PostgreSQL database
+    let updated = plantings::update(map_id, update).await;
+    // Broadcast out the state change to all users
+    broadcaster.broadcast(map_id, updated).await;
     // Finishes the HTTP request
-    return HttpResponse::Ok().json(updated_plantings);
+    return HttpResponse::Ok().json(updated);
 }
 \end{lstlisting}
+\end{minipage}
 
-Rust's approach to asynchronous programming is to compile each asynchronous function into a state machine that represents each entry point\cite{rustasyncdeepdive2024}.
-Rust does not provide a standard event loop itself; we use the runtime \texttt{tokio}\cite{tokiocrate} to supply the event loop and manage asynchronous tasks.
+In asynchronous Rust, each \rustsnippet{async} function is converted into a state machine that stores the intermediate states from which the function can be suspended and resumed at a later time. 
+These suspension entry points are denoted by the expressions \rustsnippet{await}.
+This allows asynchronous functions to return back control to the runtime, which may continue with the same function or schedule other tasks concurrently\cite{rustasyncdeepdive2024}.
 
-The broadcaster itself is thread-safe, even if multiple requests running in multiple threads call \texttt{broadcaster.broadcast()}, an internal mutex gurantees that one broadcast happens at one time.
-However, because Rust's asynchronous functions give up control, other tasks may run in between two \rustsnippet{await} statements.
-This means that another update request might be quick enough to complete its own \texttt{database\_update.await} and invoke \texttt{broadcaster.broadcast()} before this request continues execution after the first \texttt{await}. 
+Asynchronous Rust code is best suited for \gls{io} heavy application.
+To achieve effective concurrency, runtime libraries employ a small number of operating system threads, each of which can handle many concurrent tasks\cite{rustasyncbookchapter}. 
+
+In contrast to other programming environments like JavaScript running in the web browser\cite{mdnjavascripteventloop}, Rust doesn't provide any default asynchronous runtime implementation.
+PermaplanT uses the runtime library Tokio \cite{tokiocrate} to execute asynchronous Rust code.
+
+Since Rust's asynchronous functions give up control, other tasks may run in between two \rustsnippet{await} statements.
+Two update requests can interleave, which can cause actions to be braodcasted to the client in the wrong order.
 To illustrate the race condition,
-\begin{itemize}
-    \item User 1 makes a request to move a planting to (100, 100).
-    \item User 2 makes a request to move the same planting to (200, 200).
-    \item \texttt{plantings::update().await} finishes and stores (100, 100) in to the database.
-    \item The request of User 2 is quick enough to schedule itself next in the event loop. (200, 200) are both persisted to the database and also sent out via the broadcaster.
-    \item Finally (100, 100) is sent out by the broadcaster.
-\end{itemize}
+\begin{enumerate}
+    \item User 1 makes the \gls{http} request \textit{R1} to move the planting to (100, 100).
+    \item User 2 makes the \gls{http} request \textit{R2} to move the same planting to (200, 200).
+    \item \rustsnippet{plantings::update().await} finishes in \textit{R1} and stores (100, 100) \
+    in the database. The function suspends and the runtime starts executing \textit{R2}.
+    \item \textit{R2} finished the entire request, it stores (200, 200) in the database and broadcasts (200, 200) to the client.
+    \item Finally, \textit{R1} resumes execution and broadcasts (100, 100).
+\end{enumerate}
 
-This way, the final entry in the database is (200, 200) but the actions are sent in this order: (200, 200) and then (100, 100).
-The client incorrectly displays the planting at (100, 100). 
+In this way, the final entry in the database is (200, 200) but the actions are sent in this order: (200, 200) and then (100, 100).
+The client incorrectly displays the planting at (100, 100).
+
+\subsection{Critical Section}
+
+As explained by Dubey et al.\cite{artice_race_condition_and_dynamic_data_race_detection}, a race condition occurs when concurrent threads access shared resources without synchronization.
+The part of the code that handles the sharded resources is called a \textbf{Critical Section}.
+In our case, the database update and broadcasting form a critical section together.
+Without mutual exclusion, both tasks can occur out of order, leading to inconsistent results.
+The article \cite{artice_race_condition_and_dynamic_data_race_detection} further explains that any solution, that deals with securing of critical sections is judged via two mendatory criteria: 
+\begin{enumerate}
+    \item \textbf{Mutual Exclusion}
+    Only one thread should enter the critical section at one given time.
+    As discussed, in our case, any request that alters the map should finish the entire request, so that requests never interleave and cause inconsistency.
+    What is interesting in our case is that the shared data is not ram on the same computer but the order of network events that cause mutation in the ram of the clients applications.
+
+    It should be noted here that the broadcaster itself is already secured via one mutex per map.
+    \gls{sse} guarantees to preserve the order of messages across the network.
+    As specified, RFC 8895 \cite{rfc8895sse} describes the data stream as a reliable ordered connection between the server and the client.
+    
+    \item \textbf{Progress}
+    This means that only the threads that execute the critical section should pay for its synchronization.
+    We want to place the synchonization mechanism as narrow as possible, e.g. by having one mechanism (like a mutex) per map instead of one global mechanism for the section.
+\end{enumerate}
+
+\chapter{Methodology}
 
 \section{Motivation}
 
-% TODO: What testing do I mean?
-The specific motivations for testing are as follows:
+This chapter explains the two types of tests conducted to answer the research questions.
+The motivations for the tests are as following.
+
 \begin{itemize}
-    \item \textbf{Performance Motivation:} The \gls{http} request does not return until \texttt{broadcaster.await} concludes, so the latency of each request may increase with the number of \gls{sse} connections.
+    \item \textbf{Performance Test:} The \gls{http} request does not return until the broadcaster concludes, so the latency of each request may increase with the number of \gls{sse} connections.
     We aim to determine how response times scale as more observers receive updates.
-    \item \textbf{Correctness Motivation:} Since there is no critical section around the two \texttt{await} calls, an update can complete and another can begin in the middle of the \texttt{database\_update} and \texttt{broadcast} sequence.
-    This could cause out-of-order broadcasts, where the \texttt{updated\_data} sent to clients does not align with the current database state.
-    If the actions are order-dependent, this misalignment could create inconsistencies between the client and database states.
+    \item \textbf{Correctness Test:} Since there is a race condition in the broadcaster we want to confirm that actions can be broadcasted in the wrong order. 
 \end{itemize}
 
-\chapter{Methodology}
+\section{Testing Hardware}
+
+There are two different computers used to conduct the test.
+
+Desktop Computer \textit{Computer A}
+\begin{itemize}
+  \item Operating System: Linux Mint 22 (Linux Kernel 6.8.0-45-generic)
+  \item CPU: Intel i7-5820K (12) @ 3600MHz
+  \item RAM: 16 GiB DDR4 @ 2133MHz
+  \item Storage: 120 GiB Solid State Drive
+\end{itemize}
+
+Laptop \textit{Computer B}
+\begin{itemize}
+  \item Operating System: Linux Mint 22 (Linux Kernel 6.8.0-41-generic)
+  \item CPU: Intel i5-6300U (4) @ 3000Mhz
+  \item RAM: 8 GiB DDR4 @ 2133MHz
+  \item Storage: 240 GiB Solid State Drive
+\end{itemize}
 
 \section{Performance Test}
 
@@ -234,8 +289,8 @@ To evaluate the performance of the event broadcasting mechanism in the Permaplan
 These tests measure the response time for user requests.
 
 \subsection{Simulating Connections}
-To simulate multiple users viewing the same map, we developed a Python script \texttt{./connect\_listener.py}.
-\texttt{./connect\_listener.py} establishes concurrent connections to the event broadcasting service at the endpoint \texttt{/api/updates}.
+To simulate multiple users viewing the same map, we developed a Python script \bashsnippet{./connect_listener.py}.
+\texttt{./connect\_listener.py} establishes concurrent connections to the event broadcasting service at the endpoint \urlsnippet{/api/updates}.
 The number of connections and the nature of each connection can be configured through command-line arguments.
 We simulated 100 concurrent users on map with the ID of 1 on localhost by executing the following command: 
 \begin{lstlisting}[language=sh]
@@ -245,12 +300,12 @@ This initiates 100 Python threads (green threads), each of which opens an \gls{s
 
 \subsection{Simulating User Interaction with the Map}
 A second Python script emulates a user making modifications to the map.
-The script begins by creating a planting on the map and then continuously alters its position by sending an \gls{http} \texttt{PATCH} request to \texttt{api/maps/<MAP\_ID>/layers/plants/plantings}.
+The script begins by creating a planting on the map and then continuously alters its position by sending an \gls{http} \texttt{PATCH} request to \urlsnippet{api/maps/<map_id>/layers/plants/plantings}.
 
 It can be configured how many request the script makes.
-In our benchmark we used the invocation \texttt{python3 make\_requests.py --url localhost --map\_id 1 100} to make
+In our benchmark we used the invocation \bashsnippet{python3 make_requests.py --url localhost --map_id 1 100} to make
 100 move requests - it deletes the slowest and the fastest measurements and returns the average time each request takes to complete.
-
+    
 \subsection{Tests}
 
 Each test is conducted by connecting a number of concurrent users while measuring the request times using the second script. The tests are run both locally and against the production server at \texttt{https://www.permaplant.net}.
@@ -269,7 +324,7 @@ Each test follows the following steps:
 \begin{enumerate}
     \item start the backend (release build)
     \item use the python script to emulate connected users
-    E.g \texttt{./connect\_listener.py --map\_id 1 10} for 10 connections
+    E.g \bashsnippet{./connect\_listener.py --map\_id 1 10} for 10 connections
     \item In a different shell execute 200 requests \texttt{./make\_request.py 200}
 \end{enumerate}
 
@@ -417,6 +472,37 @@ With 400 additional connections (+ a 401st connection that keeps track of the re
 
 While the conditions of the test were intentionally designed to trigger the data race, it is questionable whether the data race would happen under real use.
 Nevertheless we were able to prove that actions are not guaranteed to be sent out in the correct order.
+
+\section{Possible solutions to the Action ordering problem}
+
+Message ordering is often a problem in distributed systems.
+
+\subsection{Global Event Ordering}
+
+\chapter{Related Work}
+
+Thore Fechner developed a web application called Ehtermap to demonstrate real-time synchronization for collaborative editing of geospatial data on a map\cite{ethermap}.
+Ethermap uses continuous synchronization of all changes.
+In contrast to PermaplanT's Map Editor, Ethermap displays information about all currently connected users and the area of the map users are currently editing.
+To handle conflicts and to trace changes, Ethermap provides a continuous history feed of all changes on a map.
+Users can inspect revisions and restore previous states.
+
+PermaplanT's could benefit from adding visual indicators to signal that other users are working on the same Garden Map.
+A history management tool could help users understand changes and experiment more freely, by being able to revert changes.
+
+Neogy et al. discusses the challenges of maintaining shared awareness among users while supporting independent exploration within a real-time collaboration application. \cite{collaboration_visualizations} 
+
+To bridge that gap, the article introduces interactive features designed to balance collaboration and autonomy:
+\begin{enumerate}
+    \item \textbf{Peeking} Temporarily viewing another user’s state
+    \item \textbf{Tracking} Synchronizing views with another user’s actions in real time.
+    \item \textbf{Forking} Independent exploration starting from another user’s state)
+\end{enumerate}
+
+The concept of forking is interesting, because it allows users to diverge from the shared state and experiment with alternative configurations. 
+
+Litt et al. present Peritext, a Conflict-Free Replicated Data Types (CRDTs) algorithm extrended to rich text editing.\cite{peritext}
+% TODO peritext summarize a bit more
 
 \printglossary[type=\acronymtype,title=Acronyms]
 

@@ -7,6 +7,7 @@
 \lstdefinelanguage{Rust}{%
   sensitive%
 , morecomment=[l]{//}%
+, frame=single
 , morecomment=[s]{/*}{*/}%
 , moredelim=[s][{\itshape\color[rgb]{0,0,0.75}}]{\#[}{]}%
 , morestring=[b]{"}%
@@ -21,7 +22,7 @@
 % [4] type and value constructors
 % [5] identifier
 %
-, morekeywords={break, continue, else, for, if, in, loop, match, return, while}  % control flow keywords
+, morekeywords={break, continue, else, for, if, in, loop, match, return, while, async, await}  % control flow keywords
 , morekeywords={as, const, let, move, mut, ref, static}  % in the context of variables
 , morekeywords={dyn, enum, fn, impl, Self, self, struct, trait, type, union, use, where}  % in the context of declarations
 , morekeywords={crate, extern, mod, pub, super}  % in the context of modularisation
