@@ -229,7 +229,8 @@ To illustrate the race condition,
     \item User 2 makes the \gls{http} request \textit{R2} to move the same planting to (200, 200).
     \item \rustsnippet{plantings::update().await} finishes in \textit{R1} and stores (100, 100) \
     in the database. The function suspends and the runtime starts executing \textit{R2}.
-    \item \textit{R2} finished the entire request, it stores (200, 200) in the database and broadcasts (200, 200) to the client.
+    \item The runtime fully executes \textit{R2} without interruption.
+    (200, 200) is both stored in the database and broadcasted to the client.
     \item Finally, \textit{R1} resumes execution and broadcasts (100, 100).
 \end{enumerate}
 
@@ -268,7 +269,7 @@ To handle conflicts and trace changes, Ethermap provides a continuous history fe
 Users can inspect revisions and restore previous states.
 
 PermaplanT's could benefit from adding visual indicators to signal that other users are working on the same Garden Map.
-A history management tool could help users understand changes and experiment more freely, by allowing them to revert changes.
+A history management tool could help users understand changes and experiment more freely, allowing them to revert changes.
 
 Neogy et al. discusses the challenges of maintaining shared awareness among users while supporting independent exploration within a real-time collaboration application. \cite{collaboration_visualizations} 
 
@@ -310,7 +311,7 @@ The motivations for the tests are as following.
 
 \section{Testing Hardware}
 
-There are two different computers used to conduct the test.
+Two different computers are used to perform the test.
 
 Desktop Computer \textit{Computer A}
 \begin{itemize}
@@ -327,6 +328,10 @@ Laptop \textit{Computer B}
   \item RAM: 8 GiB DDR4 @ 2133MHz
   \item Storage: 240 GiB Solid State Drive
 \end{itemize}
+
+\section{PermaplanT Version}
+
+The following tests were conducted on PermaplanT version \texttt{v0.4.3} with the Git hash \texttt{7091b1075}.
 
 \section{Performance Test}
 
@@ -348,7 +353,7 @@ A second Python script emulates a user making modifications to the map.
 The script begins by creating a planting on the map and then continuously alters its position by sending an \gls{http} \texttt{PATCH} request to \urlsnippet{api/maps/<map_id>/layers/plants/plantings}.
 
 It can be configured how many request the script makes.
-In our benchmark we used the invocation \bashsnippet{python3 make_requests.py --url localhost --map_id 1 100} to make
+In our benchmark we used the invocation \bashsnippet{make_requests.py --url localhost --map_id 1 100} to make
 100 move requests - it deletes the slowest and the fastest measurements and returns the average time each request takes to complete.
     
 \subsection{Tests}
@@ -370,7 +375,7 @@ Each test follows the following steps:
     \item start the backend (release build)
     \item use the Python script to emulate connected users
     E.g \bashsnippet{connect\_listener.py --map\_id 1 10} for 10 connections
-    \item In a different shell execute 200 requests \texttt{make\_request.py 200}
+    \item In a different shell execute 200 requests \bashsnippet{make\_request.py 200}
 \end{enumerate}
 
 In order to try 2000 concurrent \gls{sse} connections locally we had to adjust the number of maximum open file descriptors using the \texttt{ulimit} command.
