@@ -28,13 +28,113 @@
 
 % Define convenience functions here:
 \newcommand{\authorname}{Jannis Adamek}
-\newcommand{\thesistitle}{TODO: title}
-\newcommand{\thesistitlegerman}{TODO: title deutsch}
+\newcommand{\thesistitle}{Scalability and Event Ordering in PermaplanT's Collaborative Garden Editor}
+\newcommand{\thesistitlegerman}{Skalierbarkeit und Ereignisreihenfolge in PermaplanT's kollaborativem Garten-Editor}
 
-\newcommand{\rustsnippet}[1]{\lstinline[language=rust]{#1}}
-\newcommand{\bashsnippet}[1]{\lstinline[language=bash]{#1}}
-\newcommand{\pythonsnippet}[1]{\lstinline[language=python]{#1}}
-\newcommand{\urlsnippet}[1]{\lstinline[language=url]{#1}}
+\newcommand{\rustsnippet}[1]{%
+    \lstinline[
+        language=rust,
+        breaklines=true,
+        breakatwhitespace=true
+    ]{#1}%
+}
+\newcommand{\bashsnippet}[1]{%
+    \lstinline[
+        language=bash,
+        breaklines=true,
+        breakatwhitespace=true
+    ]{#1}%
+}
+\newcommand{\pythonsnippet}[1]{%
+    \lstinline[
+        language=python,
+        breaklines=true,
+        breakatwhitespace=true
+    ]{#1}%
+}
+\newcommand{\urlsnippet}[1]{%
+    \lstinline[
+        language=url,
+        breaklines=true,
+        breakatwhitespace=true
+    ]{#1}%
+}
+
+\usepackage{pgfplotstable} % For importing CSV files
+\usepackage{pgfplots} % For creating plots
+\newcommand{\precision}{2}
+\newcommand{\perfTableAndGraphFromCsv}[1]{%
+    % Load the CSV data into a macro
+    \pgfplotstableread[col sep=semicolon]{#1}\loadeddata
+    
+    % Display the loaded data as a table
+    \begin{table}[ht]
+    \centering
+    \pgfplotstabletypeset[
+        string type, % Treat columns as strings if needed
+        every head row/.style={before row=\hline, after row=\hline}, % Add horizontal lines
+        every last row/.style={after row=\hline}, % Add horizontal line after the last row
+        columns={Measuring,Fastest,Slowest,Average,Median}, % Specify the columns to display
+        display columns/0/.style={column name=Connected Users},
+        display columns/1/.style={
+            column name=Fastest,
+            fixed,
+            dec sep align,
+            precision=\precision
+        },
+        display columns/2/.style={
+            column name=Slowest,
+            fixed,
+            dec sep align,
+            precision=\precision
+        },
+        display columns/3/.style={
+            column name=Average,
+            fixed,
+            dec sep align,
+            precision=\precision
+        },
+        display columns/4/.style={
+            column name=Median,
+            fixed,
+            dec sep align,
+            precision=\precision
+        }
+    ]{\loadeddata} % Use the loaded data
+    \end{table}
+
+    % Add a bar graph using the loaded data
+    \begin{tikzpicture}
+        \begin{axis}[
+            width=\textwidth,
+            height=8cm,
+            xlabel={Connected Users},
+            ylabel={Time (ms)},
+            xtick=data,
+            xticklabels from table={\loadeddata}{Measuring},
+            legend pos=north west,
+            ymajorgrids=true,
+            grid style=dashed,
+            bar width=3pt, % Set the width of the bars
+            ybar,
+            legend image code/.code={\draw [#1] (0cm,-0.5em) rectangle (3pt,0.5em); },
+        ]
+
+        \addplot table [x expr=\coordindex, y=Fastest]{\loadeddata};
+        \addlegendentry{Fastest}
+
+        \addplot table [x expr=\coordindex, y=Slowest]{\loadeddata};
+        \addlegendentry{Slowest}
+
+        \addplot table [x expr=\coordindex, y=Average]{\loadeddata};
+        \addlegendentry{Average}
+
+        \addplot table [x expr=\coordindex, y=Median]{\loadeddata};
+        \addlegendentry{Median}
+
+        \end{axis}
+    \end{tikzpicture}
+}
 
 % Set PDF document properties
 \hypersetup{
@@ -155,7 +255,7 @@ For example, actions that affect plantings on the map include the following type
 \begin{itemize}
     \item \texttt{CreatePlanting} creates one or more new plantings.
     \item \texttt{MovePlanting} updates the position (x,y) of one or more plantings on the map.
-    \item\texttt{TransformPlanting} changes the size of one or more plantings on the map.
+    \item \texttt{TransformPlanting} changes the size of one or more plantings on the map.
 \end{itemize}
 
 For each \gls{http} endpoint that modifies the state of the map, the frontend includes a client-generated \gls{uuid} called \texttt{actionId} in the request body.
@@ -192,6 +292,7 @@ For example, to move one or more plantings, the client makes an \gls{http} \text
 This request sets the absolute positions of two plantings.
 
 \section{Race Condition in the Broadcasting Mechanism}
+\label{sec:race_condition}
 
 All \gls{http} endpoints in the backend follow the steps of the following simplified illustration in Rust.
 
@@ -311,9 +412,8 @@ The motivations for the tests are as following.
 
 \section{Testing Hardware}
 
-Two different computers are used to perform the test.
+The computers used to perform the tests has the following specification:
 
-Desktop Computer \textit{Computer A}
 \begin{itemize}
   \item Operating System: Linux Mint 22 (Linux Kernel 6.8.0-45-generic)
   \item CPU: Intel i7-5820K (12) @ 3600MHz
@@ -321,139 +421,68 @@ Desktop Computer \textit{Computer A}
   \item Storage: 120 GiB Solid State Drive
 \end{itemize}
 
-Laptop \textit{Computer B}
-\begin{itemize}
-  \item Operating System: Linux Mint 22 (Linux Kernel 6.8.0-41-generic)
-  \item CPU: Intel i5-6300U (4) @ 3000Mhz
-  \item RAM: 8 GiB DDR4 @ 2133MHz
-  \item Storage: 240 GiB Solid State Drive
-\end{itemize}
-
-\section{PermaplanT Version}
-
-The following tests were conducted on PermaplanT version \texttt{v0.4.3} with the Git hash \texttt{7091b1075}.
+The tests were conducted against PermaplanT version \texttt{v0.4.3} with the Git hash \texttt{7091b1075}.
+All mentioned test scripts have been checked into the Permaplant Git repository under \texttt{benchmarks/sse\_benchmark}.
 
 \section{Performance Test}
 
-To evaluate the performance of the event broadcasting mechanism in the PermaplanT Map Editor, we conducted a series of performance tests while simulating an increasing number of concurrent users viewing the same map.
-These tests measure the response time for user requests.
+To evaluate the performance of the event broadcasting mechanism in the PermaplanT Map Editor, we developed a Bash script \bashsnippet{test_perf.sh}.
+It measures how long \gls{http} requests, that update a plantings position, take to resolve with an increasing number of simulated concurrent users viewing the same map.
 
-\subsection{Simulating Connections}
 To simulate multiple users viewing the same map, we developed a Python script \bashsnippet{connect_listener.py}.
-\bashsnippet{connect\_listener.py} establishes concurrent connections to the event broadcasting service at the endpoint \urlsnippet{/api/updates}.
+The script establishes concurrent connections to the event broadcasting service at the endpoint \urlsnippet{/api/updates}.
 The number of connections can be configured through command-line arguments.
-We simulated 100 concurrent users on map with the ID of 1 on localhost by executing the following command: 
-\begin{lstlisting}[language=bash]
-python3 connect\_listener.py --url localhost --map\_id 1 100
-\end{lstlisting}
-This initiates 100 Python threads (green threads), each of which opens an \gls{sse} connection.  
 
-\subsection{Simulating User Interaction with the Map}
-A second Python script emulates a user making modifications to the map.
-The script begins by creating a planting on the map and then continuously alters its position by sending an \gls{http} \texttt{PATCH} request to \urlsnippet{api/maps/<map_id>/layers/plants/plantings}.
+The python script \bashsnippet{make_request.py} emulates a user making modifications to the map.
+The script begins by creating a planting on the map.
+It then sends many \gls{http} \texttt{PATCH} requests in succession that alter the plants position.
+The script outputs the slowest, the fastest times, as well as the average and median time of all resqusts.
 
-It can be configured how many request the script makes.
-In our benchmark we used the invocation \bashsnippet{make_requests.py --url localhost --map_id 1 100} to make
-100 move requests - it deletes the slowest and the fastest measurements and returns the average time each request takes to complete.
-    
-\subsection{Tests}
-
-Each test is conducted by connecting a number of concurrent users while measuring the request times using the second script. The tests are run both locally and against the production server at \urlsnippet{https://www.permaplant.net}.
-
-\section{Local tests}
-
-The local tests are run on a computer with the following specifications:
-\begin{itemize}
-  \item Operating System: Linux Mint 22 (Linux Kernel 6.8.0-45-generic)
-  \item CPU: Intel i7-5820K (12) @ 3600MHz
-  \item RAM: 16 GiB DDR4 @ 2133MHz
-  \item Storage: 120 GiB Solid State Drive
-\end{itemize}
-
-Each test follows the following steps:
+\bashsnippet{test_perf.sh} tests the return times for the differnet amounts of connected users (10 20 50 100 150 200 500 1000 2000 5000 10000).
+For each of these measurements the script follows the following steps:
 \begin{enumerate}
-    \item start the backend (release build)
-    \item use the Python script to emulate connected users
-    E.g \bashsnippet{connect\_listener.py --map\_id 1 10} for 10 connections
-    \item In a different shell execute 200 requests \bashsnippet{make\_request.py 200}
+    \item Start the PermaplanT backend application (built in release mode).
+    \item Sleep 5 seconds to let the backend start up and stop churning.
+    \item Connect the required amount of users with \bashsnippet{connect_listeners.py}.
+    \item Make 200 requests using \bashsnippet{make_request.py}.
+    \item Stop the backend application.
 \end{enumerate}
-
-In order to try 2000 concurrent \gls{sse} connections locally we had to adjust the number of maximum open file descriptors using the \texttt{ulimit} command.
-The default for this limit on Linux Mint 22 is 1024 (shown by \bashsnippet{ulimit -n}).
-We adjusted this limit to 3000 before simulating 2000 concurrent \gls{sse} connection.
-Without this adjustment Backend would log \texttt{Too many open files (os error 24)}.
-
-\section{Test against www.permaplant.net}
-
-Our production server is hosted on \urlsnippet{www.permaplant.net}.
-On one computer we use the connection script while a different computer on a different network makes the requests.
-
-On the above mentioned computer we simulate our connected users with this invocation: 
-\begin{verbatim}
-# For 10 connections
-connect\_listener.py \
-    --url https://www.permaplant.net \
-    --map\_id 79 \
-    --client\_id "PermaplanT-Prod" \
-    10 
-\end{verbatim}
-
-On a different computer (Thinkpad T470 i5-6300U) in a different network we simulate the requests:
-\texttt{make\_request.py --url https://www.permaplant.net --map\_id 79 --client\_id "PermaplanT-Prod" 200}
 
 \section{Action Order Test}
 
-This test investigates whether actions may reach the client in a different order than the sequence in which their corresponding changes are committed to the database.
-To record planting position updates we added new table called \texttt{planting\_log} into our PostgreSQL database, that keeps a log of all moved plantings, with their old and new x and y coordinates.
+The script \bashsnippet{test_order.py} tests whether database writes and actions follow the same order.
+We want to confirm that the data race discussed in Section~\ref{sec:race_condition} can lead to a different order of database write and actions.
 
-\begin{lstlisting}[language=sql]
-CREATE TABLE IF NOT EXISTS planting_log (
-    log_timestamp timestamp DEFAULT clock_timestamp(),
-    planting_id uuid NOT NULL,
-    old_x int,
-    old_y int,
-    new_x int, kkm
-    new_y int,
-    PRIMARY KEY (log_timestamp, planting_id)
-);
-\end{lstlisting}
+To record database writes in the planting table, we added a PostgreSQL migration script that can be added to the backend.
+This migration adds a table called \texttt{planting\_log}, that keeps a log of all moved plantings, with their old and new x and y coordinates.
+A trigger, that executes before each update to the \texttt{plantings}, logs all update events into \texttt{planting\_log}.
 
-A trigger logs every update to the \texttt{plantings} table into \texttt{planting\_log}.
+We developed a script called \bashsnippet{attack.py} that move a planting via the \gls{http} \texttt{patch} request.
+It is similar to \bashsnippet{make_request.py} used in the performance tests, but it sends requests in parallel as fast as possible using Pythons \texttt{threading} library.
 
-\begin{lstlisting}[language=sql]
-CREATE TABLE IF NOT EXISTS planting_log (
-    log_timestamp timestamp DEFAULT clock_timestamp(),
-    planting_id uuid NOT NULL,
-    old_x int,
-    old_y int,
-    new_x int,
-    new_y int,
-    PRIMARY KEY (log_timestamp, planting_id)
-);
+\bashsnippet{test_order.py} follows these steps:
+\begin{enumerate}
+    \item Start the backend in release mode.
+    \item Sleep 5 seconds to let the backend start up and stop churning.
+    \item We delete all entries in the table \texttt{planting_log}.
+    \item Start \bashsnippet{connection_listener.py} with 100 simulated concurrent users.
+    This is to make the runtime busy and the race condition more likely.
+    \item \bashsnippet{connect_listener.py --record_actions=true 1 1> ./target/actions.txt 2>> ./target/error.log &}
+    Start \bashsnippet{connection_listener.py} with on listener using \bashsnippet{--record_actions=true}.
+    When supplied with this argument, the script records all actions of type \texttt{"MovePlanting"} to stdout.
+    \item Now we read out our log of course sorted by the timestamp.
+\end{enumerate}
 
-CREATE OR REPLACE FUNCTION log_planting_update()
-RETURNS trigger AS $$
-BEGIN
-    INSERT INTO planting_log (log_timestamp, planting_id, old_x, old_y, new_x, new_y)
-    VALUES (clock_timestamp(), OLD.id, OLD.x, OLD.y, NEW.x, NEW.y);
-    RETURN NEW;
-END;
-$$ LANGUAGE plpgsql;
+After the script is run, it produces two files in the same format.
+\begin{enumerate}
+    \item \bashsnippet{actions.txt}
+    \item \bashsnippet{db.txt}
+\end{enumerate}
 
-CREATE TRIGGER log_planting_update_trigger
-BEFORE UPDATE ON plantings
-FOR EACH ROW
-EXECUTE FUNCTION log_planting_update();
-\end{lstlisting}
-
-Using a similar connection script from the performance test we recorded all actions into a file. \bashsnippet{connect\_listener.py 1 1> target/actions.txt}
-
-We developed a script called \texttt{attack.py} that move a planting via the \gls{http} \texttt{patch} request.
-Lastly, we extracted the database planting\_logs into a file with the same format as \texttt{actions.txt}.
-Each line is in the format \texttt{planting\_id | x | y}.
 We used the \texttt{diff} program to compare both files line by line.
-If we find that the order is not the same we reveal that there is a race condition and events are not sent in the correct order. 
-Note that the opposite is not the case: If the order of both files are the same the broadcasting system might not have race conditions or the test may be inadequate of showing it.
+If we find that the order is not the same we reveal that there is a race condition and events are not sent in the correct order.
+
+It is worth noting that if both files are identical there can still be a race condition, it just means that the database write and the actions happened in the same order, not that they are guaranteed to. 
 
 \chapter{Results}
 
@@ -462,46 +491,8 @@ The results clearly show that the current implementation of the broadcasting sys
 \section{Performance Test}
 \subsection{Local tests}
 
-\begin{table}[h!]
-    \centering
-    \begin{tabular}{cc}
-        \toprule
-        \textbf{Connections} & \textbf{Avg Time (200 Requests) in ms} \\
-        \midrule
-        0 & 6.39 \\
-        10 & 6.20 \\
-        20 & 6.66 \\
-        50 & 6.50 \\
-        100 & 6.24 \\
-        150 & 6.86 \\
-        200 & 7.58 \\
-        500 & 9.85 \\
-        1000 & 10.97 \\
-        2000 & 10.10 \\
-        \bottomrule
-    \end{tabular}
-    \caption{Results of 200 Requests for Different Connection Counts}
-\end{table}
-
-\subsection{Test against www.permaplant.net}
-
-\begin{table}[h!]
-    \centering
-    \begin{tabular}{cc}
-        \toprule
-        \textbf{Connections} & \textbf{Avg Time (200 Requests) in ms} \\
-        \midrule
-        0 & 64.06 \\
-        10 & 60.24 \\
-        20 & 60.81 \\
-        50 & 61.52 \\
-        100 & 64.76 \\
-        150 & 64.55 \\
-        200 & 62.42 \\
-        \bottomrule
-    \end{tabular}
-    \caption{Results of 200 Requests for Remote Test}
-\end{table}
+\perfTableAndGraphFromCsv{measurements/977c48a3f_base_perf.csv}
+\perfTableAndGraphFromCsv{measurements/fix_race_condition.csv}
 
 \section{Action Order Test}
 
