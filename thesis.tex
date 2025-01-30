@@ -63,15 +63,18 @@
 }
 
 \newcommand{\precision}{2}
-\newcommand{\perfTableAndGraphFromCsv}[1]{
+\newcommand{\perfTableAndGraphFromCsv}[1]{%
+    % Load the CSV data into a macro
     \pgfplotstableread[col sep=semicolon]{#1}\loadeddata
+    
+    % Display the loaded data as a table
     \begin{table}[ht]
     \centering
     \pgfplotstabletypeset[
-        string type,
-        every head row/.style={before row=\hline, after row=\hline},
-        every last row/.style={after row=\hline},
-        columns={Measuring,Fastest,Slowest,Average,Median},
+        string type, % Treat columns as strings if needed
+        every head row/.style={before row=\hline, after row=\hline}, % Add horizontal lines
+        every last row/.style={after row=\hline}, % Add horizontal line after the last row
+        columns={Measuring,Fastest,Slowest,Average,Median}, % Specify the columns to display
         display columns/0/.style={column name=Connected Users},
         display columns/1/.style={
             column name=Fastest,
@@ -104,7 +107,7 @@
     \begin{tikzpicture}
         \begin{axis}[
             width=\textwidth,
-            height=5.5cm,
+            height=8cm,
             xlabel={Connected Users},
             ylabel={Time (ms)},
             xtick=data,
@@ -114,21 +117,17 @@
             grid style=dashed,
             bar width=3pt, % Set the width of the bars
             ybar,
-            legend image code/.code={\draw [#1] (0cm,-0.5em) rectangle (3pt,0.5em); },
+            legend image code/.code={
+                \draw [##1] (0cm,-0.1cm) rectangle (0.6cm,0.1cm);
+            },
         ]
-
-        \addplot table [x expr=\coordindex, y=Fastest]{\loadeddata};
-        \addlegendentry{Fastest}
-
-        \addplot table [x expr=\coordindex, y=Slowest]{\loadeddata};
-        \addlegendentry{Slowest}
-
-        \addplot table [x expr=\coordindex, y=Average]{\loadeddata};
-        \addlegendentry{Average}
-
-        \addplot table [x expr=\coordindex, y=Median]{\loadeddata};
-        \addlegendentry{Median}
-
+    
+        \addplot table [x expr=\coordindex, y=Fastest]{\loadeddata}; \addlegendentry{Fastest}
+        \addplot table [x expr=\coordindex, y=Slowest]{\loadeddata}; \addlegendentry{Slowest}
+        \addplot table [x expr=\coordindex, y=Average]{\loadeddata}; \addlegendentry{Average}
+        \addplot table [x expr=\coordindex, y=Median]{\loadeddata}; \addlegendentry{Median}
+        \legend{Fastest, Slowest, Average, Median}
+    
         \end{axis}
     \end{tikzpicture}
 }
@@ -190,8 +189,8 @@ PermaplanT is a web application for collaborative garden planning featuring a re
 A race condition in the broadcasting mechanism can cause clients to receive actions (change events) in the wrong order, leading to inconsistencies between the state displayed to users and the state stored in the database.
 Additionally, PermaplanT must scale to support at least 100 concurrent users without performance degradation.
 Using Python script, we conducted two tests: a performance test to measure response times with increasing numbers of concurrent connections, and a correctness test to detect cases where broadcasted actions arrived out of order.
-The performance test showed that that the system could handle 100 concurrent users, with increasing response times beyond 1000 connections.
 The correctness test confirmed that race conditions can indeed lead to event ordering issues.
+The performance test showed that that the system could handle 100 concurrent users, with increasing response times beyond 1000 connections.
 We present a possible solution to fix the race condition.
 \end{abstract}
 
