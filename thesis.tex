@@ -16,6 +16,8 @@
 \usepackage{todonotes} % Provides tooltip-like todo notes.
 \usepackage{hyperref}  % Enables hyperlinking in the electronic document version. This package has to be included second to last.
 \usepackage[acronym,toc]{glossaries} % Enables the generation of glossaries and lists of acronyms. This package has to be included last.
+\usepackage{pgfplotstable} % For importing CSV files
+\usepackage{pgfplots} % For creating plots
 \usepackage{listings, listings-rust, listings-json, listings-url} % Code
 \usepackage{hyperref}
 \lstset{
@@ -60,21 +62,16 @@
     ]{#1}%
 }
 
-\usepackage{pgfplotstable} % For importing CSV files
-\usepackage{pgfplots} % For creating plots
 \newcommand{\precision}{2}
-\newcommand{\perfTableAndGraphFromCsv}[1]{%
-    % Load the CSV data into a macro
+\newcommand{\perfTableAndGraphFromCsv}[1]{
     \pgfplotstableread[col sep=semicolon]{#1}\loadeddata
-    
-    % Display the loaded data as a table
     \begin{table}[ht]
     \centering
     \pgfplotstabletypeset[
-        string type, % Treat columns as strings if needed
-        every head row/.style={before row=\hline, after row=\hline}, % Add horizontal lines
-        every last row/.style={after row=\hline}, % Add horizontal line after the last row
-        columns={Measuring,Fastest,Slowest,Average,Median}, % Specify the columns to display
+        string type,
+        every head row/.style={before row=\hline, after row=\hline},
+        every last row/.style={after row=\hline},
+        columns={Measuring,Fastest,Slowest,Average,Median},
         display columns/0/.style={column name=Connected Users},
         display columns/1/.style={
             column name=Fastest,
@@ -107,7 +104,7 @@
     \begin{tikzpicture}
         \begin{axis}[
             width=\textwidth,
-            height=8cm,
+            height=5.5cm,
             xlabel={Connected Users},
             ylabel={Time (ms)},
             xtick=data,
@@ -360,7 +357,33 @@ The article \cite{artice_race_condition_and_dynamic_data_race_detection} further
     We want to place the synchronization mechanism as narrow as possible, for example by having one mechanism (like a Mutex) per map instead of one global mechanism for the section.
 \end{enumerate}
 
+\section{Proposed Solution to the Race Condition}
+\label{proposedsolution}
+
+To secure the critical section we could introduce a function that locks one map for read/write access.
+
+\begin{minipage}{\linewidth}
+\begin{lstlisting}[language=rust]
+async update_plantings(
+    map_id: i32,
+    update: UpdatePlantingDto,
+) -> Result<HttpResponse> {
+    // Lock all SSE senders connected to map_id 
+    let guard = broadcaster.lock(map_id).await;
+    let updated = plantings::update(map_id, update).await;
+    broadcaster.broadcast(guard, map_id, updated).await;
+    return HttpResponse::Ok().json(updated);
+}
+\end{lstlisting}
+\end{minipage}
+
+As part of this thesis we implemented an experimental solution.
+It uses the Rust crate scc \cite{scccrate}, that comes with a concurrent hashmap, that allows locking of buckets.
+The full modification can be found in the Git repository under the commit \texttt{26ac5afb2}.
+We tested this implementation against the existing implementation.
+
 \chapter{Related Work}
+\label{related_work}
 
 Thore Fechner developed a web application called Ehtermap to demonstrate real-time synchronization for collaborative editing of geospatial data on a map\cite{ethermap}.
 
@@ -427,11 +450,12 @@ All mentioned test scripts have been checked into the Permaplant Git repository 
 \section{Performance Test}
 
 To evaluate the performance of the event broadcasting mechanism in the PermaplanT Map Editor, we developed a Bash script \bashsnippet{test_perf.sh}.
-It measures how long \gls{http} requests, that update a plantings position, take to resolve with an increasing number of simulated concurrent users viewing the same map.
+It measures the response time of \gls{http} requests under varying levels of concurrent SSE connections.
+Specifically, we evaluate the slowest, fastest, average, and median response times to understand PermaplanT scales with increasing numbers of concurrent users.
+Average and median response times provide the best sense for the systems behavior.
 
 To simulate multiple users viewing the same map, we developed a Python script \bashsnippet{connect_listener.py}.
 The script establishes concurrent connections to the event broadcasting service at the endpoint \urlsnippet{/api/updates}.
-The number of connections can be configured through command-line arguments.
 
 The python script \bashsnippet{make_request.py} emulates a user making modifications to the map.
 The script begins by creating a planting on the map.
@@ -439,83 +463,100 @@ It then sends many \gls{http} \texttt{PATCH} requests in succession that alter t
 The script outputs the slowest, the fastest times, as well as the average and median time of all resqusts.
 
 \bashsnippet{test_perf.sh} tests the return times for the differnet amounts of connected users (10 20 50 100 150 200 500 1000 2000 5000 10000).
+The numbers of concurrent users  were chosen to represent a wide range of usage scenarios, from light to extreme loads.
+
 For each of these measurements the script follows the following steps:
 \begin{enumerate}
-    \item Start the PermaplanT backend application (built in release mode).
-    \item Sleep 5 seconds to let the backend start up and stop churning.
-    \item Connect the required amount of users with \bashsnippet{connect_listeners.py}.
-    \item Make 200 requests using \bashsnippet{make_request.py}.
-    \item Stop the backend application.
+    \item Start the PermaplanT backend application, built in release mode to optimize performance.
+    \item Sleep 5 seconds to allow the backend to initialize fully and stabilize, minimizing the impact of startup overhead on the measurements.
+    \item Simulate the required number of concurrent users by running \bashsnippet{connect_listener.py}, which establishes connections to the event broadcasting service.
+    \item Execute 200 \gls{http} \texttt{PATCH} requests using \bashsnippet{make_request.py}.
+    \item Terminate the backend application.
 \end{enumerate}
 
 \section{Action Order Test}
 
-The script \bashsnippet{test_order.py} tests whether database writes and actions follow the same order.
+The script \bashsnippet{test_order.py} is designed to verify whether database writes and actions occur in the same order.
 We want to confirm that the data race discussed in Section~\ref{sec:race_condition} can lead to a different order of database write and actions.
 
-To record database writes in the planting table, we added a PostgreSQL migration script that can be added to the backend.
-This migration adds a table called \texttt{planting\_log}, that keeps a log of all moved plantings, with their old and new x and y coordinates.
-A trigger, that executes before each update to the \texttt{plantings}, logs all update events into \texttt{planting\_log}.
+To capture database writes, we implemented a PostgreSQL migration script that can be added to the backend.
+This migration adds a table \texttt{planting\_log}, that keeps a log of all moved plantings.
+A trigger is defined to execute before each update to the \texttt{plantings} table, automatically logging the changes into \texttt{planting\_log}.
 
-We developed a script called \bashsnippet{attack.py} that move a planting via the \gls{http} \texttt{patch} request.
-It is similar to \bashsnippet{make_request.py} used in the performance tests, but it sends requests in parallel as fast as possible using Pythons \texttt{threading} library.
+Additionally. we developed a script called \bashsnippet{attack.py}
+to simulate rapid modifications to the same planting via an \gls{http} \texttt{patch} request.
+This script is similar to \bashsnippet{make_request.py}, used in the performance tests, but it sends requests in parallel as quickly as possible using Python’s \texttt{threading} library.
 
-\bashsnippet{test_order.py} follows these steps:
+The \bashsnippet{test_order.py} script executes the following steps:
 \begin{enumerate}
-    \item Start the backend in release mode.
-    \item Sleep 5 seconds to let the backend start up and stop churning.
-    \item We delete all entries in the table \texttt{planting_log}.
-    \item Start \bashsnippet{connection_listener.py} with 100 simulated concurrent users.
-    This is to make the runtime busy and the race condition more likely.
-    \item \bashsnippet{connect_listener.py --record_actions=true 1 1> ./target/actions.txt 2>> ./target/error.log &}
-    Start \bashsnippet{connection_listener.py} with on listener using \bashsnippet{--record_actions=true}.
-    When supplied with this argument, the script records all actions of type \texttt{"MovePlanting"} to stdout.
-    \item Now we read out our log of course sorted by the timestamp.
+    \item Start the backend in release mode to ensure optimal performance.
+    \item Sleep 5 seconds to allow the backend to fully stabilize, minimizing the impact of statup overhead.
+    \item Delete all entries in the table \texttt{planting\_log}.
+    \item Simulate 100 concurrent users by running \bashsnippet{connection_listener.py}. This creates a high load on the system, increasing the likelihood of encountering the race condition.
+    \item Execute \bashsnippet{connect_listener.py} with the \bashsnippet{--record_actions=true} flag, redirecting output to \bashsnippet{./target/actions.txt}. This records all actions of type \texttt{"MovePlanting"} to \texttt{actions.txt}.
+    \item Extract and sort the database logs by timestamp into \texttt{db.txt}.
 \end{enumerate}
 
-After the script is run, it produces two files in the same format.
-\begin{enumerate}
-    \item \bashsnippet{actions.txt}
-    \item \bashsnippet{db.txt}
-\end{enumerate}
-
+The two resulting files \texttt{actions.txt} and \texttt{db.txt} are formatted in the same way, one update per line.
 We used the \texttt{diff} program to compare both files line by line.
 If we find that the order is not the same we reveal that there is a race condition and events are not sent in the correct order.
-
-It is worth noting that if both files are identical there can still be a race condition, it just means that the database write and the actions happened in the same order, not that they are guaranteed to. 
+However, it is important to note that if the files are identical, it does not guarantee the absence of a race condition.
+It simply means that, during the test, the actions and database writes happened to occur in the same order.
 
 \chapter{Results}
 
-The results clearly show that the current implementation of the broadcasting system can support 100 concurrent users.
-
 \section{Performance Test}
-\subsection{Local tests}
 
-\perfTableAndGraphFromCsv{measurements/977c48a3f_base_perf.csv}
-\perfTableAndGraphFromCsv{measurements/fix_race_condition.csv}
+\subsection{Exisint implementation}
+
+\perfTableAndGraphFromCsv{perfexisting.csv}
+
+\subsection{Proposed Implementation}
+
+\perfTableAndGraphFromCsv{perfsuggestion.csv}
 
 \section{Action Order Test}
 
 The test moved the same planting on the same time 20,000 in parallel.
 On a local setup the likelihood of events out of order increased when we connected more listeners.
-With 400 additional connections (+ a 401st connection that keeps track of the received events) there were 34 action received in the wrong order.
+In one test-run with 200 additional connections there were 34 action received in the wrong order.
+This test clearly confirms that the race condition can lead to actions being sent out-of-order.
+
+The proposed improvement from the Section \ref{proposedsolution} showed the same ordering between database writes and actions.
 
 \chapter{Discussion}
+This thesis evaluated the performance and correctness of PermaplanT's collaborative Map Editor, focusing on the scalability of the broadcasting mechanism and the presence of a race condition.
+We identified that the asynchronous database update and the broadcaster form a critical section and suggested an alternative implementation of the broadcaster.
 
-\section{Performance Test}
+\section{Performance}
 
-\section{Action Order Test}
+The performance of both the existing implementation and the suggested fix for the broadcasters race condition have similar performance characteristics.
+he proposed solution using mutual exclusion did not significantly impact performance, as the locking mechanism was designed to be lightweight and map-specific.
+Response times remain stable in both implementations, according to this test, the application can easily support 100 concurrent users on the same map.
+Beyond 100 users, response times increase gradually, with a noticeable spike at 10,000 users.
+The steep increase in response times at 10,000 users suggests that the work load does not scale up linearly or that there is a clear bottleneck in the broadcasting mechanism.
 
-While the conditions of the test were intentionally designed to trigger the data race, it is questionable whether the data race would happen under real use.
-Nevertheless we were able to prove that actions are not guaranteed to be sent out in the correct order.
+Both test scripts can serve the project as helpful tools to optimize the broadcasting even further.
+The tests allows us to measure how much the broadcasting mechanism slows down map update request in easily repeatable manner.
 
-\section{Possible solutions to the Action ordering problem}
+\section{Limitations of the tests}
 
-Message ordering is often a problem in distributed systems.
+Network latency, server hosting, and load balancing strategies can significantly impact the system’s scalability.
+These factors were not evaluated in the Performance Tests, as the tests were conducted in a controlled local setup.
+Future work could include real-world testing to assess the system’s performance under varying network conditions and hosting configurations.
+All scripts are configurable to run against different servers other than localhost.
+These tests did further not evaluate how the performance of the frontend gets affected by an increasing number of actions.
+This study focused on local testing of the backend to minimize variables.
 
-\subsection{Global Event Ordering}
+\section{Different solutions to the race condition}
 
-\printglossary[type=\acronymtype,title=Acronyms]
+A drawback of the suggested solution \ref{proposedsolution} is that the implementer of each request has to manually lock the broadcaster before a critical section.
+In other words, the intent of the critical section is not translated into Rust's type system, there are no compiler warning if this is forgotten.
+An alternative would be to automatically lock the broadcaster for each request that operates on one map.
+This way the implementer could not forget to lock the broadcaster on the correct line.
+
+As discussed in the Section \ref{related_work} an alternative to fixing the race condition is by adapting a system like Conflict-Free Replicated Data Types (CRDTs).
+This eliminates the need for strict event ordering, as operations would be commutative.
 
 \backmatter
 
