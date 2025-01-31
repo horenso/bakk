@@ -408,7 +408,7 @@ Its focus is to ensure that edits from multiple users (such as changing text, ed
 Rather than storing formatting as a tree (like XML), Peritext assigns a unique identifier to each character and stores formatting as spans linked to characters.
 Deleted characters still remain in the text as tombstones.
 
-Permaplant's Map Editor could use ideas from CRDTs and Peritext
+Permaplant's Map Editor could use ideas from CRDTs and Peritext:
 \begin{enumerate}
     \item \textbf{Commutative operations} Peritext employs order-independent operations, where the sequence of user actions does not affect the final state.
     Therefore, there is no need to guarantee the order of events.
